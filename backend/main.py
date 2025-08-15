@@ -123,7 +123,6 @@ def save_class_attendence(attendance_data: AttendanceRequest, class_id: str = Pa
 
     db.commit()
 
-
     return {
         "message": "Attendance saved",
         "class_id": class_id,
