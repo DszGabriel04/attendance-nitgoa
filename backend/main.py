@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Path
-from sqlalchemy import func, case
+from sqlalchemy import func, case, select
 from sqlalchemy.orm import Session
 import models, schemas
 from typing import List
@@ -73,14 +73,15 @@ def delete_class(class_id: str = Path(..., description="ID of the class to delet
 def get_classes(db: Session = Depends(get_db)):
     today = date.today()
 
-    # Subquery to count attendance for today per class
-    attendance_subquery = (db.query(models.Attendance.class_id, func.count(models.Attendance.id).label("count_today")).filter(models.Attendance.date == today).group_by(models.Attendance.class_id).subquery())
+    # Attendance counts per class for today
+    attendance_counts = ( select( models.Attendance.class_id, func.count(models.Attendance.id).label("count_today")).where(models.Attendance.date == today).group_by(models.Attendance.class_id).subquery())
 
-    # Query classes and left join attendance counts
-    classes = (db.query(models.Class.id, models.Class.subject_name, case((attendance_subquery.c.count_today > 0, "Yes"), else_="No").label("attendance_taken"))
-        .outerjoin(attendance_subquery, models.Class.id == attendance_subquery.c.class_id).all() )
+    stmt = (select(models.Class.id, models.Class.subject_name, case( (attendance_counts.c.count_today > 0, "Yes"), else_="No").label("attendance_taken"))
+        .outerjoin(attendance_counts, models.Class.id == attendance_counts.c.class_id))
 
-    return [ {"id": cls[0], "subject_name": cls[1], "attendance_taken": cls[2]} for cls in classes]     # returns [] if no class found
+    classes = db.execute(stmt).mappings().all()
+
+    return ( [{"id": cls["id"], "subject_name": cls["subject_name"], "attendance_taken": cls["attendance_taken"]} for cls in classes])
 
 
 @app.post("/classes/{class_id}/attendence")
@@ -100,6 +101,17 @@ def save_class_attendence(attendance_data: AttendanceRequest, class_id: str = Pa
             errors.append(f"Student '{item.student_id}' not found")
             continue
 
+        # UPDATES ARE NOT ENABLED VIA POST; WILL RETURN ERROR
+        existing = db.query(models.Attendance).filter(
+            models.Attendance.class_id == class_id,
+            models.Attendance.student_id == item.student_id,
+            models.Attendance.date == attendance_date
+        ).first()
+
+        if existing:
+            errors.append(f"Attendance already recorded for student '{item.student_id}'")
+            continue
+
         new_rec = models.Attendance(
             class_id=class_id,
             student_id=item.student_id,
@@ -110,6 +122,7 @@ def save_class_attendence(attendance_data: AttendanceRequest, class_id: str = Pa
         created += 1
 
     db.commit()
+
 
     return {
         "message": "Attendance saved",
@@ -151,3 +164,16 @@ def update_attendance(attendance_data: AttendanceRequest, class_id: str = Path(.
         "message": f"Updated {updated} record(s)",
         "errors": errors
     }
+
+
+@app.get("/attendance/history/{class_id}") #     ----->  [] if course code doesnt exist else json of records
+def get_attendance_history(class_id: str, db: Session = Depends(get_db)):
+    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
+    if not class_obj:  return []    #raise HTTPException(status_code=404, detail="Class not found")
+
+    # Fetch attendance records with student details
+    attendance_records = (db.query( models.Attendance.date, models.Student.id.label("student_id"), models.Student.name.label("student_name"), models.Student.id, models.Attendance.present)
+        .join(models.Student, models.Student.id == models.Attendance.student_id).filter(models.Attendance.class_id == class_obj.id) .order_by(models.Attendance.date.asc(), models.Student.id.asc()).all() )
+
+    history = [ {"date": record.date, "student_id": record.student_id, "student_name": record.student_name, "status": "P" if record.present else "A"} for record in attendance_records]
+    return {"class_code": class_id, "attendance_history": history}
