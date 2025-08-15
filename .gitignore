@@ -5,6 +5,7 @@ venv/
 # Frontend stuff
 frontend/node_modules/
 */.vscode/
+sbox/
 
 # Expo stuff
 frontend/.expo/
