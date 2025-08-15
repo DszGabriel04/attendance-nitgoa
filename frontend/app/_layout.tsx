@@ -18,12 +18,11 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DefaultTheme : DefaultTheme}>
+        <Stack>
+          {/* All screens in app/ will be automatically included in the stack */}
+        </Stack>
+        <StatusBar style="auto" />
+      </ThemeProvider>
   );
 }
