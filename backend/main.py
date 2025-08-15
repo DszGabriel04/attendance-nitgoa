@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Path
-from sqlalchemy import func, case
+from sqlalchemy import func, case, select
 from sqlalchemy.orm import Session
 import models, schemas
 from datetime import date
@@ -73,12 +73,13 @@ def delete_class(class_id: str = Path(..., description="ID of the class to delet
 def get_classes(db: Session = Depends(get_db)):
     today = date.today()
 
-    # Subquery to count attendance for today per class
-    attendance_subquery = (db.query(models.Attendance.class_id, func.count(models.Attendance.id).label("count_today")).filter(models.Attendance.date == today).group_by(models.Attendance.class_id).subquery())
+    # Attendance counts per class for today
+    attendance_counts = ( select( models.Attendance.class_id, func.count(models.Attendance.id).label("count_today")).where(models.Attendance.date == today).group_by(models.Attendance.class_id).subquery())
 
-    # Query classes and left join attendance counts
-    classes = (db.query(models.Class.id, models.Class.subject_name, case((attendance_subquery.c.count_today > 0, "Yes"), else_="No").label("attendance_taken"))
-        .outerjoin(attendance_subquery, models.Class.id == attendance_subquery.c.class_id).all() )
-    
-    return [ {"id": cls[0], "subject_name": cls[1], "attendance_taken": cls[2]} for cls in classes]     # returns [] if no class found
+    # Query classes with attendance info
+    stmt = (select(models.Class.id, models.Class.subject_name, case( (attendance_counts.c.count_today > 0, "Yes"), else_="No").label("attendance_taken"))
+        .outerjoin(attendance_counts, models.Class.id == attendance_counts.c.class_id))
 
+    classes = db.execute(stmt).mappings().all()
+
+    return ( [{"id": cls["id"], "subject_name": cls["subject_name"], "attendance_taken": cls["attendance_taken"]} for cls in classes])
