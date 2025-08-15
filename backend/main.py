@@ -83,3 +83,18 @@ def get_classes(db: Session = Depends(get_db)):
     classes = db.execute(stmt).mappings().all()
 
     return ( [{"id": cls["id"], "subject_name": cls["subject_name"], "attendance_taken": cls["attendance_taken"]} for cls in classes])
+
+
+
+
+@app.get("/attendance/history/{class_id}") #     ----->  [] if course code doesnt exist else json of records
+def get_attendance_history(class_id: str, db: Session = Depends(get_db)):
+    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
+    if not class_obj:  return []    #raise HTTPException(status_code=404, detail="Class not found")  
+
+    # Fetch attendance records with student details
+    attendance_records = (db.query( models.Attendance.date, models.Student.id.label("student_id"), models.Student.name.label("student_name"), models.Student.id, models.Attendance.present)
+        .join(models.Student, models.Student.id == models.Attendance.student_id).filter(models.Attendance.class_id == class_obj.id) .order_by(models.Attendance.date.asc(), models.Student.id.asc()).all() )
+
+    history = [ {"date": record.date, "student_id": record.student_id, "student_name": record.student_name, "status": "P" if record.present else "A"} for record in attendance_records]
+    return {"class_code": class_id, "attendance_history": history}
