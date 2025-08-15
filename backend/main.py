@@ -44,10 +44,18 @@ def create_class(class_data: schemas.StudentsBatchCreate, db: Session = Depends(
 
 @app.delete("/classes/{class_id}")
 def delete_class(class_id: str = Path(..., description="ID of the class to delete"), db: Session = Depends(get_db)):
-    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
-    if not class_obj:       return {"error": f"Class with id '{class_id}' does not exist"}
-    db.query(models.Attendance).filter(models.Attendance.class_id == class_id).delete()         #delete related attendance records first to avoid FK errors
-    db.delete(class_obj)
-    db.commit()
 
-    return {"message": f"Class '{class_id}' has been deleted"}
+    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
+    if not class_obj:   raise HTTPException(status_code=404, detail=f"Class with id '{class_id}' does not exist")
+
+    db.query(models.Attendance).filter(models.Attendance.class_id == class_id).delete()
+    db.delete(class_obj)
+    db.commit()  # commit deletion of class and attendance
+
+    all_students = db.query(models.Student).all()
+    for student in all_students:
+        has_attendance = db.query(models.Attendance).filter(models.Attendance.student_id == student.id).first()
+        if not has_attendance:  db.delete(student)
+
+    db.commit()
+    return {"message": f"Class '{class_id}' and its attendance have been deleted. Students no longer in any class were also removed."}
