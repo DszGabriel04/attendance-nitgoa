@@ -1,14 +1,18 @@
 from fastapi import FastAPI, Depends, HTTPException, Path
+from sqlalchemy import func, case, select
 from sqlalchemy.orm import Session
 import models, schemas
 from datetime import date
 
 app = FastAPI()
 
+
+
 def get_db():                   # Dependency to get DB session
     db = models.SessionLocal()
     try:        yield db
     finally:    db.close()
+
 
 
 @app.post("/faculty/login")
@@ -17,6 +21,7 @@ def faculty_login(email: str, password: str, db: Session = Depends(get_db)):
     if not faculty:                        raise HTTPException(status_code=404, detail="Invalid email")
     if password != faculty.password_hash:  raise HTTPException(status_code=401, detail="Invalid password")      # plain password for now
     return {"message": "Login successful"}
+
 
 
 @app.post("/classes")
@@ -42,12 +47,39 @@ def create_class(class_data: schemas.StudentsBatchCreate, db: Session = Depends(
     return {"message": f"Class '{class_data.id}' created with {len(class_data.students)} students, all marked present for today"}
 
 
+
 @app.delete("/classes/{class_id}")
 def delete_class(class_id: str = Path(..., description="ID of the class to delete"), db: Session = Depends(get_db)):
+
     class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
-    if not class_obj:       return {"error": f"Class with id '{class_id}' does not exist"}
-    db.query(models.Attendance).filter(models.Attendance.class_id == class_id).delete()         #delete related attendance records first to avoid FK errors
+    if not class_obj:   raise HTTPException(status_code=404, detail=f"Class with id '{class_id}' does not exist")
+
+    db.query(models.Attendance).filter(models.Attendance.class_id == class_id).delete()
     db.delete(class_obj)
     db.commit()
 
-    return {"message": f"Class '{class_id}' has been deleted"}
+    # delete students not belonging to any class from the students db
+    all_students = db.query(models.Student).all()
+    for student in all_students:
+        has_attendance = db.query(models.Attendance).filter(models.Attendance.student_id == student.id).first()
+        if not has_attendance:  db.delete(student)
+
+    db.commit()
+    return {"message": f"Class '{class_id}' and its attendance have been deleted. Students no longer in any class were also removed."}
+
+
+
+@app.get("/classes")
+def get_classes(db: Session = Depends(get_db)):
+    today = date.today()
+
+    # Attendance counts per class for today
+    attendance_counts = ( select( models.Attendance.class_id, func.count(models.Attendance.id).label("count_today")).where(models.Attendance.date == today).group_by(models.Attendance.class_id).subquery())
+
+    # Query classes with attendance info
+    stmt = (select(models.Class.id, models.Class.subject_name, case( (attendance_counts.c.count_today > 0, "Yes"), else_="No").label("attendance_taken"))
+        .outerjoin(attendance_counts, models.Class.id == attendance_counts.c.class_id))
+
+    classes = db.execute(stmt).mappings().all()
+
+    return ( [{"id": cls["id"], "subject_name": cls["subject_name"], "attendance_taken": cls["attendance_taken"]} for cls in classes])
