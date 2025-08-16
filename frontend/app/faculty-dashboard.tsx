@@ -1,29 +1,33 @@
 // faculty-dashboard.tsx
 import React from 'react';
+import { ColorPicker } from '../utils/ColorPicker';
 import { View, Text, TouchableOpacity, FlatList, StyleSheet, StatusBar, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-const dummyClasses = [
+const rawClasses = [
   {
-    "id": "CS101",
-    "subject_name": "Computer Science Fundamentals",
-    "attendance_taken": "Yes",
-    "color": "#4285F4"
+    id: "CS101",
+    subject_name: "Computer Science Fundamentals",
+    attendance_taken: "Yes"
   },
   {
-    "id": "MA201",
-    "subject_name": "Advanced Mathematics",
-    "attendance_taken": "No",
-    "color": "#34A853"
+    id: "MA201",
+    subject_name: "Advanced Mathematics",
+    attendance_taken: "No"
   },
   {
-    "id": "EE301",
-    "subject_name": "Electrical Engineering Basics",
-    "attendance_taken": "Yes",
-    "color": "#EA4335"
+    id: "EE301",
+    subject_name: "Electrical Engineering Basics",
+    attendance_taken: "Yes"
   }
 ];
+
+const colorPicker = new ColorPicker();
+const dummyClasses = rawClasses.map((cls, idx) => ({
+  ...cls,
+  color: colorPicker.getColor(idx)
+}));
 
 export default function FacultyDashboard() {
   const router = useRouter();

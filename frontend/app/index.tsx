@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 
 export default function LoginScreen() {
   const [role, setRole] = useState<'faculty' | 'student' | null>(null);
@@ -49,12 +48,8 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={['#667eea', '#764ba2']}
-      style={styles.container}
-    >
+    <View style={[styles.container, { backgroundColor: '#667eea' }]}> 
       <StatusBar barStyle="light-content" />
-      
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>NIT Goa</Text>
@@ -139,7 +134,7 @@ export default function LoginScreen() {
           )}
         </View>
       </View>
-    </LinearGradient>
+  </View>
   );
 }
 
