@@ -19,7 +19,7 @@ export default function RootLayout() {
 
   return (
       <ThemeProvider value={colorScheme === 'dark' ? DefaultTheme : DefaultTheme}>
-        <Stack>
+        <Stack screenOptions={{ headerShown: false }}>
           {/* All screens in app/ will be automatically included in the stack */}
         </Stack>
         <StatusBar style="auto" />
