@@ -1,6 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
+import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
+import { ThemedButton } from '@/components/ThemedButton';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
 export default function LoginScreen() {
   const [role, setRole] = useState<'faculty' | 'student' | null>(null);
@@ -11,6 +16,8 @@ export default function LoginScreen() {
   const router = useRouter();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const cardBackgroundColor = useThemeColor({}, 'cardBackground');
+  const primaryColor = useThemeColor({}, 'buttonPrimary');
 
   React.useEffect(() => {
     if (role) {
@@ -48,32 +55,44 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: '#667eea' }]}> 
-      <StatusBar barStyle="light-content" />
+    <ThemedView style={styles.container}> 
+      <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>NIT Goa</Text>
-          <Text style={styles.subtitle}>Attendance Portal</Text>
+          <ThemedText style={styles.title}>NIT Goa</ThemedText>
+          <ThemedText style={styles.subtitle}>Attendance Portal</ThemedText>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Select Your Role</Text>
+        <View style={[styles.card, { backgroundColor: cardBackgroundColor }]}>
+          <ThemedText style={styles.cardTitle}>Select Your Role</ThemedText>
           
           <View style={styles.roleContainer}>
             <TouchableOpacity
               onPress={() => setRole('faculty')}
-              style={[styles.roleButton, role === 'faculty' && styles.selectedRole]}
+              style={[
+                styles.roleButton, 
+                role === 'faculty' && [styles.selectedRole, { backgroundColor: primaryColor }]
+              ]}
             >
-              <Text style={[styles.roleText, role === 'faculty' && styles.selectedRoleText]}>
+              <Text style={[
+                styles.roleText, 
+                role === 'faculty' && styles.selectedRoleText
+              ]}>
                 Faculty
               </Text>
             </TouchableOpacity>
             
             <TouchableOpacity
               onPress={() => setRole('student')}
-              style={[styles.roleButton, role === 'student' && styles.selectedRole]}
+              style={[
+                styles.roleButton, 
+                role === 'student' && [styles.selectedRole, { backgroundColor: primaryColor }]
+              ]}
             >
-              <Text style={[styles.roleText, role === 'student' && styles.selectedRoleText]}>
+              <Text style={[
+                styles.roleText, 
+                role === 'student' && styles.selectedRoleText
+              ]}>
                 Student
               </Text>
             </TouchableOpacity>
@@ -84,57 +103,45 @@ export default function LoginScreen() {
               {role === 'faculty' ? (
                 <>
                   <View style={styles.inputContainer}>
-                    <TextInput
+                    <ThemedTextInput
                       placeholder="Username"
-                      placeholderTextColor="#9ca3af"
                       value={username}
                       onChangeText={setUsername}
-                      style={styles.input}
                       autoCapitalize="none"
                     />
                   </View>
                   
                   <View style={styles.inputContainer}>
-                    <TextInput
+                    <ThemedTextInput
                       placeholder="Password"
-                      placeholderTextColor="#9ca3af"
                       value={password}
                       onChangeText={setPassword}
                       secureTextEntry
-                      style={styles.input}
                     />
                   </View>
                 </>
               ) : (
                 <View style={styles.inputContainer}>
-                  <TextInput
+                  <ThemedTextInput
                     placeholder="Roll Number"
-                    placeholderTextColor="#9ca3af"
                     value={rollNumber}
                     onChangeText={setRollNumber}
-                    style={styles.input}
                     autoCapitalize="characters"
                   />
                 </View>
               )}
 
-              <TouchableOpacity
+              <ThemedButton
+                title={isLoading ? 'Signing In...' : 'Sign In'}
                 onPress={handleLogin}
                 disabled={!isFormValid() || isLoading}
-                style={[
-                  styles.submitButton,
-                  (!isFormValid() || isLoading) && styles.disabledButton
-                ]}
-              >
-                <Text style={styles.submitButtonText}>
-                  {isLoading ? 'Signing In...' : 'Sign In'}
-                </Text>
-              </TouchableOpacity>
+                style={styles.submitButton}
+              />
             </Animated.View>
           )}
         </View>
       </View>
-  </View>
+  </ThemedView>
   );
 }
 
@@ -155,17 +162,15 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: '700',
-    color: '#ffffff',
     marginBottom: 8,
     letterSpacing: 1,
   },
   subtitle: {
     fontSize: 18,
-    color: '#e5e7eb',
     fontWeight: '300',
+    opacity: 0.8,
   },
   card: {
-    backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 30,
     width: '100%',
@@ -182,13 +187,12 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#374151',
     textAlign: 'center',
     marginBottom: 25,
   },
   roleContainer: {
     flexDirection: 'row',
-    backgroundColor: '#f3f4f6',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     padding: 4,
     marginBottom: 30,
@@ -200,8 +204,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   selectedRole: {
-    backgroundColor: '#667eea',
-    shadowColor: '#667eea',
+    shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 2,
@@ -213,7 +216,7 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#6b7280',
+    color: '#B0BEC5',
   },
   selectedRoleText: {
     color: '#ffffff',
@@ -225,23 +228,9 @@ const styles = StyleSheet.create({
   inputContainer: {
     marginBottom: 16,
   },
-  input: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    color: '#374151',
-  },
   submitButton: {
-    backgroundColor: '#667eea',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
     marginTop: 10,
-    shadowColor: '#667eea',
+    shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 4,
@@ -249,16 +238,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
-  },
-  disabledButton: {
-    backgroundColor: '#9ca3af',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  submitButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.5,
   },
 });

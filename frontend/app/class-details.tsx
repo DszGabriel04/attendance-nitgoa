@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { 
   View, 
-  Text, 
   TouchableOpacity, 
   FlatList, 
   StyleSheet, 
@@ -13,6 +12,9 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
 const dummyStudents = [
   { roll: '101', name: 'Alice Johnson' },
@@ -26,6 +28,12 @@ export default function ClassDetails() {
   const router = useRouter();
   const { classId } = useLocalSearchParams();
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  
+  // Theme colors
+  const backgroundColor = useThemeColor({}, 'background');
+  const cardBackground = useThemeColor({}, 'cardBackground');
+  const primaryColor = useThemeColor({}, 'buttonPrimary');
+  const dangerColor = useThemeColor({}, 'danger');
 
   const handleDeleteClass = () => {
     setDeleteModalVisible(false);
@@ -34,8 +42,6 @@ export default function ClassDetails() {
       { text: 'OK', onPress: () => router.back() }
     ]);
   };
-
-
 
   type Student = { roll: string; name: string };
 
@@ -46,65 +52,68 @@ export default function ClassDetails() {
     item: Student;
     index: number;
   }) => (
-    <View style={[styles.studentRow, index % 2 === 0 ? styles.evenRow : styles.oddRow]}>
-      <Text style={styles.rollNumber}>{item.roll}</Text>
-      <Text style={styles.studentName}>{item.name}</Text>
+    <View style={[
+      styles.studentRow, 
+      { backgroundColor: index % 2 === 0 ? cardBackground : backgroundColor }
+    ]}>
+      <ThemedText style={styles.rollNumber}>{item.roll}</ThemedText>
+      <ThemedText style={styles.studentName}>{item.name}</ThemedText>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+    <ThemedView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={backgroundColor} />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: cardBackground }]}>
         <TouchableOpacity 
-          style={styles.backButton} 
+          style={[styles.backButton, { backgroundColor: backgroundColor }]} 
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color="#374151" />
+          <Ionicons name="arrow-back" size={24} color={primaryColor} />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Attendance</Text>
-          <Text style={styles.className}>Class {classId}</Text>
+          <ThemedText style={styles.headerTitle}>Attendance</ThemedText>
+          <ThemedText style={styles.className}>Class {classId}</ThemedText>
         </View>
       </View>
 
       {/* Action Buttons */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity 
-          style={[styles.actionButton, styles.primaryButton]}
+          style={[styles.actionButton, styles.primaryButton, { backgroundColor: primaryColor }]}
           onPress={() => router.push({ pathname: '/add-attendance', params: { classId } })}
         >
           <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.primaryButtonText}>Add Attendance</Text>
+          <ThemedText style={styles.primaryButtonText}>Add Attendance</ThemedText>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.actionButton, styles.secondaryButton]}
+          style={[styles.actionButton, styles.secondaryButton, { backgroundColor: cardBackground, borderColor: primaryColor }]}
           onPress={() => {}}
         >
-          <Ionicons name="eye-outline" size={20} color="#3B82F6" />
-          <Text style={styles.secondaryButtonText}>View Attendance</Text>
+          <Ionicons name="eye-outline" size={20} color={primaryColor} />
+          <ThemedText style={[styles.secondaryButtonText, { color: primaryColor }]}>View Attendance</ThemedText>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.actionButton, styles.dangerButton]}
+          style={[styles.actionButton, styles.dangerButton, { backgroundColor: cardBackground, borderColor: dangerColor }]}
           onPress={() => setDeleteModalVisible(true)}
         >
-          <Ionicons name="trash-outline" size={20} color="#EF4444" />
-          <Text style={styles.dangerButtonText}>Delete Class</Text>
+          <Ionicons name="trash-outline" size={20} color={dangerColor} />
+          <ThemedText style={[styles.dangerButtonText, { color: dangerColor }]}>Delete Class</ThemedText>
         </TouchableOpacity>
       </View>
 
       {/* Students Table */}
-      <View style={styles.tableContainer}>
-        <Text style={styles.tableTitle}>Students ({dummyStudents.length})</Text>
+      <View style={[styles.tableContainer, { backgroundColor: cardBackground }]}>
+        <ThemedText style={styles.tableTitle}>Students ({dummyStudents.length})</ThemedText>
         
         {/* Table Header */}
-        <View style={styles.tableHeader}>
-          <Text style={styles.headerCell}>Roll No.</Text>
-          <Text style={styles.headerCell}>Name</Text>
+        <View style={[styles.tableHeader, { backgroundColor: backgroundColor }]}>
+          <ThemedText style={styles.headerCell}>Roll No.</ThemedText>
+          <ThemedText style={styles.headerCell}>Name</ThemedText>
         </View>
 
         {/* Students List */}
@@ -125,50 +134,48 @@ export default function ClassDetails() {
         onRequestClose={() => setDeleteModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+          <View style={[styles.modalContainer, { backgroundColor: cardBackground }]}>
             <View style={styles.modalHeader}>
-              <Ionicons name="warning" size={48} color="#EF4444" />
-              <Text style={styles.modalTitle}>Delete Class</Text>
-              <Text style={styles.modalMessage}>
+              <Ionicons name="warning" size={48} color={dangerColor} />
+              <ThemedText style={styles.modalTitle}>Delete Class</ThemedText>
+              <ThemedText style={styles.modalMessage}>
                 Are you sure you want to delete Class {classId}? This action cannot be undone and will remove all attendance records.
-              </Text>
+              </ThemedText>
             </View>
             
             <View style={styles.modalButtons}>
               <TouchableOpacity 
-                style={styles.cancelButton}
+                style={[styles.cancelButton, { backgroundColor: backgroundColor }]}
                 onPress={() => setDeleteModalVisible(false)}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={styles.confirmDeleteButton}
+                style={[styles.confirmDeleteButton, { backgroundColor: dangerColor }]}
                 onPress={handleDeleteClass}
               >
-                <Text style={styles.confirmDeleteButtonText}>Delete</Text>
+                <ThemedText style={styles.confirmDeleteButtonText}>Delete</ThemedText>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -179,7 +186,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -190,13 +196,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1F2937',
     marginBottom: 2,
   },
   className: {
     fontSize: 16,
-    color: '#6B7280',
     fontWeight: '500',
+    opacity: 0.7,
   },
   buttonContainer: {
     padding: 20,
@@ -217,17 +222,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   primaryButton: {
-    backgroundColor: '#3B82F6',
+    // backgroundColor set dynamically
   },
   secondaryButton: {
-    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#3B82F6',
   },
   dangerButton: {
-    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#EF4444',
   },
   primaryButtonText: {
     color: '#FFFFFF',
@@ -235,12 +236,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   secondaryButtonText: {
-    color: '#3B82F6',
     fontSize: 16,
     fontWeight: '600',
   },
   dangerButtonText: {
-    color: '#EF4444',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -248,7 +247,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 20,
     marginBottom: 20,
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -259,7 +257,6 @@ const styles = StyleSheet.create({
   tableTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
     padding: 20,
     paddingBottom: 16,
   },
@@ -267,16 +264,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: '#F8FAFC',
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   headerCell: {
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
     textAlign: 'left',
   },
   studentsList: {
@@ -288,34 +283,25 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  evenRow: {
-    backgroundColor: '#FFFFFF',
-  },
-  oddRow: {
-    backgroundColor: '#FAFBFC',
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   rollNumber: {
     flex: 1,
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
   },
   studentName: {
     flex: 1,
     fontSize: 16,
-    color: '#374151',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modalContainer: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 24,
     width: '100%',
@@ -333,15 +319,14 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1F2937',
     marginTop: 16,
     marginBottom: 8,
   },
   modalMessage: {
     fontSize: 16,
-    color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
+    opacity: 0.8,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -352,7 +337,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 10,
-    backgroundColor: '#F1F5F9',
     alignItems: 'center',
   },
   confirmDeleteButton: {
@@ -360,13 +344,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 10,
-    backgroundColor: '#EF4444',
     alignItems: 'center',
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
   },
   confirmDeleteButtonText: {
     fontSize: 16,

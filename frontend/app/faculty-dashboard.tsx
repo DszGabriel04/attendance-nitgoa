@@ -1,9 +1,12 @@
 // faculty-dashboard.tsx
 import React from 'react';
 import { ColorPicker } from '../utils/ColorPicker';
-import { View, Text, TouchableOpacity, FlatList, StyleSheet, StatusBar, SafeAreaView } from 'react-native';
+import { View, TouchableOpacity, FlatList, StyleSheet, StatusBar, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
 const rawClasses = [
   {
@@ -31,6 +34,11 @@ const dummyClasses = rawClasses.map((cls, idx) => ({
 
 export default function FacultyDashboard() {
   const router = useRouter();
+  const backgroundColor = useThemeColor({}, 'background');
+  const cardBackground = useThemeColor({}, 'cardBackground');
+  const primaryColor = useThemeColor({}, 'buttonPrimary');
+  const successColor = useThemeColor({}, 'success');
+  const dangerColor = useThemeColor({}, 'danger');
 
   const renderClassItem = ({ item }: { item: typeof dummyClasses[0] }) => (
     <TouchableOpacity 
@@ -40,18 +48,18 @@ export default function FacultyDashboard() {
       <View style={styles.cardContent}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleContainer}>
-            <Text style={styles.className}>{item.subject_name}</Text>
-            <Text style={styles.classSubtitle}>Class ID: {item.id}</Text>
+            <ThemedText style={styles.className}>{item.subject_name}</ThemedText>
+            <ThemedText style={styles.classSubtitle}>Class ID: {item.id}</ThemedText>
           </View>
         </View>
         <View style={styles.cardFooter}>
           <View style={styles.attendanceStatus}>
-            <Text style={styles.attendanceLabel}>Attendance: </Text>
+            <ThemedText style={styles.attendanceLabel}>Attendance Marked: </ThemedText>
             <View style={[
               styles.attendanceBadge, 
-              { backgroundColor: item.attendance_taken === 'Yes' ? '#34A853' : '#EA4335' }
+              { backgroundColor: item.attendance_taken === 'Yes' ? successColor : dangerColor }
             ]}>
-              <Text style={styles.attendanceBadgeText}>{item.attendance_taken}</Text>
+              <ThemedText style={styles.attendanceBadgeText}>{item.attendance_taken}</ThemedText>
             </View>
           </View>
         </View>
@@ -64,20 +72,20 @@ export default function FacultyDashboard() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1f1f1f" />
+    <ThemedView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={backgroundColor} />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor }]}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Class Attendance</Text>
+          <ThemedText style={styles.headerTitle}>Class Attendance</ThemedText>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity 
             style={styles.logoutButton}
             onPress={() => router.replace('/')}
           >
-            <Ionicons name="log-out-outline" size={20} color="white" />
+            <Ionicons name="log-out-outline" size={20} color="#ECEDEE" />
           </TouchableOpacity>
         </View>
       </View>
@@ -93,19 +101,18 @@ export default function FacultyDashboard() {
 
       {/* Floating Add Button */}
       <TouchableOpacity 
-        style={styles.addButton}
+        style={[styles.addButton, { backgroundColor: primaryColor }]}
         onPress={() => router.push('/create-class')}
       >
         <Ionicons name="add" size={28} color="white" />
       </TouchableOpacity>
-    </SafeAreaView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1f1f1f',
   },
   header: {
     flexDirection: 'row',
@@ -113,7 +120,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#1f1f1f',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -126,8 +132,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '400',
-    color: 'white',
-    fontFamily: 'Google Sans', // You might need to add this font
   },
   headerRight: {
     flexDirection: 'row',
@@ -143,7 +147,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   profileText: {
-    color: 'white',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -154,7 +157,6 @@ const styles = StyleSheet.create({
     margin: 16,
     marginBottom: 8,
     padding: 16,
-    backgroundColor: '#2d2d2d',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#3c3c3c',
@@ -168,7 +170,6 @@ const styles = StyleSheet.create({
   thisWeekTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: 'white',
   },
   viewTodoText: {
     fontSize: 14,
@@ -275,7 +276,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#4285F4',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 8,

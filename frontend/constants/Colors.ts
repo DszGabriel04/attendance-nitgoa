@@ -4,7 +4,7 @@
  */
 
 const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorDark = '#4FC3F7';
 
 export const Colors = {
   light: {
@@ -14,13 +14,31 @@ export const Colors = {
     icon: '#687076',
     tabIconDefault: '#687076',
     tabIconSelected: tintColorLight,
+    // Additional colors for forms and UI
+    cardBackground: '#ffffff',
+    inputBackground: '#f9fafb',
+    inputBorder: '#e5e7eb',
+    buttonPrimary: '#0a7ea4',
+    buttonSecondary: '#6b7280',
+    success: '#10b981',
+    danger: '#ef4444',
+    warning: '#f59e0b',
   },
   dark: {
     text: '#ECEDEE',
-    background: '#151718',
+    background: '#1a1a1a', // Dark grey background
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: '#B0BEC5',
+    tabIconDefault: '#78909C',
     tabIconSelected: tintColorDark,
+    // Additional colors for forms and UI in dark mode
+    cardBackground: '#2d2d2d', // Medium grey for cards
+    inputBackground: '#404040', // Darker grey for inputs
+    inputBorder: '#555555',
+    buttonPrimary: '#4FC3F7',
+    buttonSecondary: '#78909C',
+    success: '#4CAF50',
+    danger: '#F44336',
+    warning: '#FF9800',
   },
 };

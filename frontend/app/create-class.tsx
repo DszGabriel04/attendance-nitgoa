@@ -2,8 +2,6 @@
 import React, { useState } from 'react';
 import { 
   View, 
-  Text, 
-  TextInput, 
   TouchableOpacity, 
   StyleSheet, 
   Image, 
@@ -13,11 +11,20 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
+import { ThemedButton } from '@/components/ThemedButton';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
 export default function CreateClass() {
   const [className, setClassName] = useState('');
   const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const router = useRouter();
+  
+  const cardBackground = useThemeColor({}, 'cardBackground');
+  const primaryColor = useThemeColor({}, 'buttonPrimary');
+  const successColor = useThemeColor({}, 'success');
 
   const handleFileUpload = async () => {
     try {
@@ -76,75 +83,79 @@ export default function CreateClass() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.headerContainer}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => router.back()}
-        >
-          <Ionicons name="chevron-back" size={24} color="#007AFF" />
-        </TouchableOpacity>
-        <Text style={styles.header}>Attendance</Text>
-      </View>
-      
-      <TextInput 
-        placeholder="Class Name" 
-        value={className} 
-        onChangeText={setClassName} 
-        style={styles.input} 
-      />
-
-      <View style={styles.instructionContainer}>
-        <Text style={styles.instructionTitle}>Upload Student List (CSV)</Text>
-        <Text style={styles.instructionText}>
-          Please upload a CSV file with student information in the following format:
-        </Text>
-        <Text style={styles.formatText}>RollNumber,Name,Category</Text>
+    <ThemedView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.headerContainer}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => router.back()}
+          >
+            <Ionicons name="chevron-back" size={24} color={primaryColor} />
+          </TouchableOpacity>
+          <ThemedText style={styles.header}>Create Class</ThemedText>
+        </View>
         
-        <View style={styles.exampleContainer}>
-          <Text style={styles.exampleTitle}>Example:</Text>
-          <Image 
-            source={require('../assets/images/example_csv.png')} 
-            style={styles.exampleImage}
-            resizeMode="contain"
-          />
+        <ThemedTextInput 
+          placeholder="Class Name" 
+          value={className} 
+          onChangeText={setClassName} 
+          style={styles.input} 
+        />
+
+        <View style={[styles.instructionContainer, { backgroundColor: cardBackground }]}>
+          <ThemedText style={styles.instructionTitle}>Upload Student List (CSV)</ThemedText>
+          <ThemedText style={styles.instructionText}>
+            Please upload a CSV file with student information in the following format:
+          </ThemedText>
+          <ThemedText style={[styles.formatText, { backgroundColor: primaryColor + '20', color: primaryColor }]}>
+            RollNumber,Name,Category
+          </ThemedText>
+          
+          <View style={styles.exampleContainer}>
+            <ThemedText style={styles.exampleTitle}>Example:</ThemedText>
+            <Image 
+              source={require('../assets/images/example_csv.png')} 
+              style={[styles.exampleImage, { borderColor: useThemeColor({}, 'inputBorder') }]}
+              resizeMode="contain"
+            />
+          </View>
         </View>
-      </View>
 
-      <TouchableOpacity 
-        style={styles.uploadButton} 
-        onPress={handleFileUpload}
-      >
-        <Text style={styles.uploadButtonText}>
-          {selectedFile ? `Selected: ${selectedFile.name}` : 'Select CSV File'}
-        </Text>
-      </TouchableOpacity>
+        <ThemedButton
+          title={selectedFile ? `Selected: ${selectedFile.name}` : 'Select CSV File'}
+          onPress={handleFileUpload}
+          variant="success"
+          style={styles.uploadButton}
+        />
 
-      {selectedFile && (
-        <View style={styles.fileInfo}>
-          <Text style={styles.fileInfoText}>✓ File selected: {selectedFile.name}</Text>
-          <Text style={styles.fileInfoText}>
-            Size: {selectedFile.size !== undefined ? (selectedFile.size / 1024).toFixed(2) : 'N/A'} KB
-          </Text>
-        </View>
-      )}
+        {selectedFile && (
+          <View style={[styles.fileInfo, { backgroundColor: successColor + '20', borderLeftColor: successColor }]}>
+            <ThemedText style={[styles.fileInfoText, { color: successColor }]}>
+              ✓ File selected: {selectedFile.name}
+            </ThemedText>
+            <ThemedText style={[styles.fileInfoText, { color: successColor }]}>
+              Size: {selectedFile.size !== undefined ? (selectedFile.size / 1024).toFixed(2) : 'N/A'} KB
+            </ThemedText>
+          </View>
+        )}
 
-      <TouchableOpacity 
-        style={[styles.createButton, (!className.trim() || !selectedFile) && styles.disabledButton]} 
-        onPress={handleCreate}
-        disabled={!className.trim() || !selectedFile}
-      >
-        <Text style={styles.createButtonText}>CREATE CLASS</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <ThemedButton
+          title="CREATE CLASS"
+          onPress={handleCreate}
+          disabled={!className.trim() || !selectedFile}
+          style={styles.createButton}
+        />
+      </ScrollView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { 
-    flex: 1, 
-    padding: 20, 
-    backgroundColor: '#f5f5f5' 
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
   },
   headerContainer: {
     flexDirection: 'row',
@@ -158,20 +169,12 @@ const styles = StyleSheet.create({
   header: { 
     fontSize: 24, 
     fontWeight: 'bold',
-    color: '#333',
     flex: 1
   },
   input: { 
-    padding: 15, 
-    borderWidth: 2,
-    borderColor: '#007AFF', 
-    borderRadius: 8, 
     marginBottom: 20,
-    backgroundColor: 'white',
-    fontSize: 16
   },
   instructionContainer: {
-    backgroundColor: 'white',
     padding: 15,
     borderRadius: 8,
     marginBottom: 20,
@@ -185,19 +188,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 10,
-    color: '#333'
   },
   instructionText: {
     fontSize: 14,
-    color: '#666',
     marginBottom: 8,
-    lineHeight: 20
+    lineHeight: 20,
+    opacity: 0.8,
   },
   formatText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#007AFF',
-    backgroundColor: '#f0f8ff',
     padding: 8,
     borderRadius: 4,
     marginBottom: 15
@@ -209,54 +209,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     marginBottom: 10,
-    color: '#333'
   },
   exampleImage: {
     width: '100%',
     height: 200,
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8
   },
   uploadButton: {
-    backgroundColor: '#34C759',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
     marginBottom: 15
   },
-  uploadButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '500'
-  },
   fileInfo: {
-    backgroundColor: '#e8f5e8',
     padding: 12,
     borderRadius: 8,
     marginBottom: 20,
     borderLeftWidth: 4,
-    borderLeftColor: '#34C759'
   },
   fileInfoText: {
-    color: '#2d5a2d',
     fontSize: 14,
-    marginBottom: 4
+    marginBottom: 4,
+    fontWeight: '500',
   },
   createButton: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
     marginBottom: 30
   },
-  disabledButton: {
-    backgroundColor: '#ccc',
-    opacity: 0.6
-  },
-  createButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold'
-  }
 });

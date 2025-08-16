@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
   TouchableOpacity,
   StyleSheet,
   FlatList,
@@ -12,7 +11,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
 const dummyStudents = {
   "class_code": "CS101",
@@ -51,6 +52,13 @@ export default function AttendanceUI() {
   const [attendance, setAttendance] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const classId = dummyStudents.class_code;
+  
+  // Theme colors
+  const backgroundColor = useThemeColor({}, 'background');
+  const cardBackground = useThemeColor({}, 'cardBackground');
+  const primaryColor = useThemeColor({}, 'buttonPrimary');
+  const successColor = useThemeColor({}, 'success');
+  const dangerColor = useThemeColor({}, 'danger');
 
   // Get unique students from attendance_history
   const students = Array.from(
@@ -128,10 +136,10 @@ export default function AttendanceUI() {
   type Student = { id: string; name: string };
 
   const renderStudent = ({ item }: { item: Student }) => (
-    <View style={styles.studentCard}>
+    <View style={[styles.studentCard, { backgroundColor: cardBackground }]}>
       <View style={styles.studentInfo}>
-        <Text style={styles.studentName}>{item.name}</Text>
-        <Text style={styles.studentRoll}>ID: {item.id}</Text>
+        <ThemedText style={styles.studentName}>{item.name}</ThemedText>
+        <ThemedText style={styles.studentRoll}>ID: {item.id}</ThemedText>
       </View>
       <View style={styles.attendanceButtons}>
         <TouchableOpacity
@@ -139,95 +147,95 @@ export default function AttendanceUI() {
           style={[
             styles.attendanceButton,
             styles.presentButton,
-            attendance[item.id] === 'present' && styles.selectedPresent
+            attendance[item.id] === 'present' && [styles.selectedPresent, { backgroundColor: successColor }]
           ]}
           activeOpacity={0.7}
         >
           <Ionicons
             name="checkmark"
             size={18}
-            color={attendance[item.id] === 'present' ? '#fff' : '#10b981'}
+            color={attendance[item.id] === 'present' ? '#fff' : successColor}
           />
-          <Text style={[
+          <ThemedText style={[
             styles.buttonText,
             attendance[item.id] === 'present' && styles.selectedButtonText
           ]}>
             Present
-          </Text>
+          </ThemedText>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => handleAttendanceChange(item.id, 'absent')}
           style={[
             styles.attendanceButton,
             styles.absentButton,
-            attendance[item.id] === 'absent' && styles.selectedAbsent
+            attendance[item.id] === 'absent' && [styles.selectedAbsent, { backgroundColor: dangerColor }]
           ]}
           activeOpacity={0.7}
         >
           <Ionicons
             name="close"
             size={18}
-            color={attendance[item.id] === 'absent' ? '#fff' : '#ef4444'}
+            color={attendance[item.id] === 'absent' ? '#fff' : dangerColor}
           />
-          <Text style={[
+          <ThemedText style={[
             styles.buttonText,
             attendance[item.id] === 'absent' && styles.selectedButtonText
           ]}>
             Absent
-          </Text>
+          </ThemedText>
         </TouchableOpacity>
       </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f0f9ff" />
+    <ThemedView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={backgroundColor} />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: cardBackground }]}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#374151" />
-          <Text style={styles.backText}>Back</Text>
+          <Ionicons name="arrow-back" size={24} color={primaryColor} />
+          <ThemedText style={styles.backText}>Back</ThemedText>
         </TouchableOpacity>
         
         <View style={styles.headerInfo}>
-          <Text style={styles.title}>Attendance</Text>
-          <Text style={styles.classInfo}>Class: {classId}</Text>
+          <ThemedText style={styles.title}>Attendance</ThemedText>
+          <ThemedText style={styles.classInfo}>Class: {classId}</ThemedText>
         </View>
       </View>
 
       {/* Date Display (no picker) */}
       <View style={styles.dateSection}>
-        <View style={styles.dateButton}>
-          <Ionicons name="calendar-outline" size={20} color="#6b7280" />
-          <Text style={styles.dateText}>{today.toDateString()}</Text>
+        <View style={[styles.dateButton, { backgroundColor: cardBackground }]}>
+          <Ionicons name="calendar-outline" size={20} color={useThemeColor({}, 'icon')} />
+          <ThemedText style={styles.dateText}>{today.toDateString()}</ThemedText>
         </View>
       </View>
 
       {/* Stats */}
       <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, { backgroundColor: cardBackground }]}>
           <View style={styles.statHeader}>
-            <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-            <Text style={styles.statLabel}>Present</Text>
+            <Ionicons name="checkmark-circle" size={20} color={successColor} />
+            <ThemedText style={styles.statLabel}>Present</ThemedText>
           </View>
-          <Text style={styles.statNumber}>{presentCount}</Text>
+          <ThemedText style={styles.statNumber}>{presentCount}</ThemedText>
         </View>
         
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, { backgroundColor: cardBackground }]}>
           <View style={styles.statHeader}>
-            <Ionicons name="close-circle" size={20} color="#ef4444" />
-            <Text style={styles.statLabel}>Absent</Text>
+            <Ionicons name="close-circle" size={20} color={dangerColor} />
+            <ThemedText style={styles.statLabel}>Absent</ThemedText>
           </View>
-          <Text style={styles.statNumber}>{absentCount}</Text>
+          <ThemedText style={styles.statNumber}>{absentCount}</ThemedText>
         </View>
       </View>
 
       {/* Student List */}
       <View style={styles.listHeader}>
-        <Ionicons name="people-outline" size={20} color="#6b7280" />
-        <Text style={styles.listHeaderText}>Students</Text>
+        <Ionicons name="people-outline" size={20} color={useThemeColor({}, 'icon')} />
+        <ThemedText style={styles.listHeaderText}>Students</ThemedText>
       </View>
       
       <FlatList
@@ -244,6 +252,7 @@ export default function AttendanceUI() {
         disabled={isSubmitting || Object.keys(attendance).length === 0}
         style={[
           styles.submitButton,
+          { backgroundColor: primaryColor },
           (isSubmitting || Object.keys(attendance).length === 0) && styles.disabledButton
         ]}
         activeOpacity={0.8}
@@ -251,23 +260,21 @@ export default function AttendanceUI() {
         {isSubmitting ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color="#fff" />
-            <Text style={styles.submitButtonText}>Submitting...</Text>
+            <ThemedText style={styles.submitButtonText}>Submitting...</ThemedText>
           </View>
         ) : (
-          <Text style={styles.submitButtonText}>Submit Attendance</Text>
+          <ThemedText style={styles.submitButtonText}>Submit Attendance</ThemedText>
         )}
       </TouchableOpacity>
-    </SafeAreaView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f9ff',
   },
   header: {
-    backgroundColor: '#fff',
     paddingHorizontal: 20,
     paddingVertical: 16,
     flexDirection: 'row',
@@ -289,7 +296,6 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#374151',
   },
   headerInfo: {
     alignItems: 'flex-end',
@@ -297,19 +303,17 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1f2937',
   },
   classInfo: {
     fontSize: 14,
-    color: '#6b7280',
     marginTop: 4,
+    opacity: 0.7,
   },
   dateSection: {
     marginHorizontal: 16,
     marginBottom: 16,
   },
   dateButton: {
-    backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -317,7 +321,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -326,7 +330,6 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 16,
-    color: '#374151',
     fontWeight: '500',
   },
   statsContainer: {
@@ -337,7 +340,6 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#fff',
     padding: 16,
     borderRadius: 12,
     shadowColor: '#000',
@@ -355,12 +357,10 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
   },
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1f2937',
   },
   listHeader: {
     flexDirection: 'row',
@@ -373,14 +373,12 @@ const styles = StyleSheet.create({
   listHeaderText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
   },
   list: {
     flex: 1,
     paddingHorizontal: 16,
   },
   studentCard: {
-    backgroundColor: '#fff',
     paddingHorizontal: 20,
     paddingVertical: 16,
     marginBottom: 8,
@@ -400,12 +398,11 @@ const styles = StyleSheet.create({
   studentName: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
     marginBottom: 4,
   },
   studentRoll: {
     fontSize: 14,
-    color: '#6b7280',
+    opacity: 0.7,
   },
   attendanceButtons: {
     flexDirection: 'row',
@@ -419,46 +416,41 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   presentButton: {
-    backgroundColor: '#f0fdf4',
-    borderColor: '#bbf7d0',
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
   },
   selectedPresent: {
-    backgroundColor: '#10b981',
-    borderColor: '#10b981',
+    borderColor: 'transparent',
   },
   absentButton: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
   },
   selectedAbsent: {
-    backgroundColor: '#ef4444',
-    borderColor: '#ef4444',
+    borderColor: 'transparent',
   },
   buttonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
   },
   selectedButtonText: {
     color: '#fff',
   },
   submitButton: {
-    backgroundColor: '#3b82f6',
     marginHorizontal: 16,
     marginVertical: 16,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#3b82f6',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
   },
   disabledButton: {
-    backgroundColor: '#9ca3af',
+    opacity: 0.5,
     shadowOpacity: 0,
     elevation: 0,
   },
