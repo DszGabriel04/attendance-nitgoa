@@ -19,6 +19,7 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 
 export default function CreateClass() {
   const [className, setClassName] = useState('');
+  const [classCode, setClassCode] = useState('');
   const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const router = useRouter();
   
@@ -48,6 +49,11 @@ export default function CreateClass() {
       return;
     }
 
+    if (!classCode.trim()) {
+      Alert.alert('Error', 'Please enter a class code');
+      return;
+    }
+
     if (!selectedFile) {
       Alert.alert('Error', 'Please select a CSV file');
       return;
@@ -56,6 +62,7 @@ export default function CreateClass() {
     try {
       const formData = new FormData();
       formData.append('className', className);
+      formData.append('classCode', classCode);
       formData.append('csvFile', {
         uri: selectedFile.uri,
         type: selectedFile.mimeType || 'text/csv',
@@ -73,7 +80,7 @@ export default function CreateClass() {
 
       if (response.ok) {
         Alert.alert('Success', 'Class created successfully!');
-        router.back();
+        router.push('/faculty-dashboard');
       } else {
         throw new Error('Failed to create class');
       }
@@ -88,7 +95,7 @@ export default function CreateClass() {
         <View style={styles.headerContainer}>
           <TouchableOpacity 
             style={styles.backButton} 
-            onPress={() => router.back()}
+            onPress={() => router.push('/faculty-dashboard')}
           >
             <Ionicons name="chevron-back" size={24} color={primaryColor} />
           </TouchableOpacity>
@@ -100,6 +107,14 @@ export default function CreateClass() {
           value={className} 
           onChangeText={setClassName} 
           style={styles.input} 
+        />
+
+        <ThemedTextInput 
+          placeholder="Class Code (e.g., CS101, MATH202)" 
+          value={classCode} 
+          onChangeText={setClassCode} 
+          style={styles.input}
+          autoCapitalize="characters"
         />
 
         <View style={[styles.instructionContainer, { backgroundColor: cardBackground }]}>
@@ -142,7 +157,7 @@ export default function CreateClass() {
         <ThemedButton
           title="CREATE CLASS"
           onPress={handleCreate}
-          disabled={!className.trim() || !selectedFile}
+          disabled={!className.trim() || !classCode.trim() || !selectedFile}
           style={styles.createButton}
         />
       </ScrollView>
