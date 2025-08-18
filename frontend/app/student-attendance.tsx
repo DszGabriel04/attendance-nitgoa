@@ -9,6 +9,7 @@ import {
   Dimensions
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedButton } from '@/components/ThemedButton';
@@ -170,6 +171,8 @@ export default function StudentAttendance() {
   const [classCode, setClassCode] = useState('');
   const [selectedClass, setSelectedClass] = useState<ReturnType<typeof transformAttendanceData> | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [headerScrollRef, setHeaderScrollRef] = useState<ScrollView | null>(null);
+  const [rowScrollRefs, setRowScrollRefs] = useState<ScrollView[]>([]);
   
   const cardBackground = useThemeColor({}, 'cardBackground');
   const successColor = useThemeColor({}, 'success');
@@ -202,10 +205,37 @@ export default function StudentAttendance() {
   const handleSearch = () => {
     if (classData[classCode]) {
       setSelectedClass(classData[classCode]);
+      // Reset scroll refs when new class is selected
+      setHeaderScrollRef(null);
+      setRowScrollRefs([]);
     } else {
       setSelectedClass(null);
     }
     setShowSuggestions(false);
+  };
+
+  // Function to handle synchronized scrolling
+  const handleScroll = (event: any, isHeader: boolean = false, rowIndex?: number) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    
+    if (isHeader) {
+      // Sync all row scrollviews with header scroll
+      rowScrollRefs.forEach(ref => {
+        if (ref) {
+          ref.scrollTo({ x: offsetX, animated: false });
+        }
+      });
+    } else {
+      // Sync header and other rows with current row scroll
+      if (headerScrollRef) {
+        headerScrollRef.scrollTo({ x: offsetX, animated: false });
+      }
+      rowScrollRefs.forEach((ref, index) => {
+        if (ref && index !== rowIndex) {
+          ref.scrollTo({ x: offsetX, animated: false });
+        }
+      });
+    }
   };
 
   const renderAttendanceCell = (status: string, index: number) => (
@@ -226,7 +256,7 @@ export default function StudentAttendance() {
   const renderStudentRow = (student: { rollNo: string; name: string; attendance: string[] }, index: number) => (
     <View key={student.rollNo} style={styles.studentRow}>
       {/* Sticky left column with roll number and name */}
-      <View style={[styles.stickyColumn, { backgroundColor: cardBackground }]}>
+      <View style={styles.stickyColumn}>
         <ThemedText style={styles.rollNoText}>{student.rollNo}</ThemedText>
         <ThemedText style={styles.studentNameText} numberOfLines={1}>
           {student.name}
@@ -235,9 +265,18 @@ export default function StudentAttendance() {
       
       {/* Scrollable attendance columns */}
       <ScrollView 
+        ref={(ref) => {
+          if (ref && !rowScrollRefs[index]) {
+            const newRefs = [...rowScrollRefs];
+            newRefs[index] = ref;
+            setRowScrollRefs(newRefs);
+          }
+        }}
         horizontal 
         showsHorizontalScrollIndicator={false}
         style={styles.attendanceScrollView}
+        onScroll={(event) => handleScroll(event, false, index)}
+        scrollEventThrottle={16}
       >
         <View style={styles.attendanceRow}>
           {student.attendance.map((status, i) => renderAttendanceCell(status, i))}
@@ -251,57 +290,65 @@ export default function StudentAttendance() {
       <StatusBar barStyle="light-content" backgroundColor={backgroundColor} />
       
       <View style={[styles.fixedHeader, { backgroundColor: backgroundColor }]}>
-        <View style={styles.header}>
-          <ThemedText style={styles.headerTitle}>Attendance Tracker</ThemedText>
-          <ThemedText style={styles.headerSubtitle}>NIT Goa</ThemedText>
+        {/* Back Button and Header */}
+        <View style={styles.headerWithBack}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.replace('/')}
+          >
+            <Ionicons name="arrow-back" size={24} color={useThemeColor({}, 'text')} />
+          </TouchableOpacity>
+          
+          <View style={styles.headerCenter}>
+            <ThemedText style={styles.headerTitle}>Attendance Tracker</ThemedText>
+            <ThemedText style={styles.headerSubtitle}>NIT Goa</ThemedText>
+          </View>
+          
+          <View style={styles.placeholder} />
         </View>
 
         {/* Class Code Input Section */}
         <View style={styles.inputSection}>
-        <ThemedText style={styles.inputLabel}>Enter Class Code:</ThemedText>
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={[styles.input, { backgroundColor: inputBackground, borderColor }]}
-            value={classCode}
-            onChangeText={(text) => {
-              setClassCode(text);
-              setShowSuggestions(text.length > 0);
-            }}
-            placeholder="e.g., CSE101, MATH201, PHY101"
-            placeholderTextColor="#888"
-            onFocus={() => setShowSuggestions(classCode.length > 0)}
-          />
-          <ThemedButton
-            title="Search"
-            onPress={handleSearch}
-            style={styles.searchButton}
-          />
-        </View>
-        
-        {/* Suggestions Dropdown */}
-        {showSuggestions && filteredClasses.length > 0 && (
-          <View style={[styles.suggestionsContainer, { backgroundColor: cardBackground, borderColor }]}>
-            {filteredClasses.map((code) => (
-              <TouchableOpacity
-                key={code}
-                style={styles.suggestionItem}
-                onPress={() => handleClassSelect(code)}
-              >
-                <ThemedText style={styles.suggestionCode}>{code}</ThemedText>
-                <ThemedText style={styles.suggestionName}>
-                  {classData[code]?.className || 'Class'}
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
+          <ThemedText style={styles.inputLabel}>Enter Class Code:</ThemedText>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={[styles.input, { backgroundColor: inputBackground, borderColor }]}
+              value={classCode}
+              onChangeText={(text) => {
+                setClassCode(text);
+                setShowSuggestions(text.length > 0);
+              }}
+              placeholder="e.g., CSE101, MATH201, PHY101"
+              placeholderTextColor="#888"
+              onFocus={() => setShowSuggestions(classCode.length > 0)}
+            />
+            <ThemedButton
+              title="Search"
+              onPress={handleSearch}
+              style={styles.searchButton}
+            />
           </View>
-        )}
-      </View>
-
-        )
-      </View>
-
-      {/* Scrollable Content Area */}
-      <View style={styles.contentContainer}>
+          
+          {/* Suggestions Dropdown */}
+          {showSuggestions && filteredClasses.length > 0 && (
+            <View style={[styles.suggestionsContainer, { backgroundColor: cardBackground, borderColor }]}>
+              {filteredClasses.map((code) => (
+                <TouchableOpacity
+                  key={code}
+                  style={styles.suggestionItem}
+                  onPress={() => handleClassSelect(code)}
+                >
+                  <ThemedText style={styles.suggestionCode}>{code}</ThemedText>
+                  <ThemedText style={styles.suggestionName}>
+                    {classData[code]?.className || 'Class'}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      </View>      {/* Scrollable Content Area */}
+      <ScrollView style={styles.contentContainer} showsVerticalScrollIndicator={false}>
         {/* Attendance Spreadsheet */}
         {selectedClass && (
           <View style={styles.spreadsheetContainer}>
@@ -311,30 +358,36 @@ export default function StudentAttendance() {
               </ThemedText>
             </View>
 
-            {/* Header Row */}
-            <View style={styles.headerRow}>
-              <View style={[styles.stickyColumn, styles.headerStickyColumn, { backgroundColor: cardBackground }]}>
-                <ThemedText style={styles.headerText}>Roll No / Name</ThemedText>
-              </View>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                style={styles.headerScrollView}
-              >
-                <View style={styles.dateHeaderRow}>
-                  {selectedClass.dates.map((date, index) => (
-                    <View key={index} style={[styles.dateHeader, { backgroundColor: cardBackground }]}>
-                      <ThemedText style={styles.dateHeaderText}>{date}</ThemedText>
-                    </View>
-                  ))}
+            {/* Modern Spreadsheet */}
+            <View style={[styles.modernSpreadsheet, { backgroundColor: cardBackground }]}>
+              {/* Header Row */}
+              <View style={styles.headerRow}>
+                <View style={[styles.stickyColumn, styles.headerStickyColumn]}>
+                  <ThemedText style={styles.headerText}>Student Info</ThemedText>
                 </View>
+                <ScrollView 
+                  ref={(ref) => setHeaderScrollRef(ref)}
+                  horizontal 
+                  showsHorizontalScrollIndicator={true}
+                  style={styles.headerScrollView}
+                  onScroll={(event) => handleScroll(event, true)}
+                  scrollEventThrottle={16}
+                >
+                  <View style={styles.dateHeaderRow}>
+                    {selectedClass.dates.map((date, index) => (
+                      <View key={index} style={styles.dateHeader}>
+                        <ThemedText style={styles.dateHeaderText}>{date}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Student Rows */}
+              <ScrollView style={styles.studentsContainer} showsVerticalScrollIndicator={true}>
+                {selectedClass.students.map((student, index) => renderStudentRow(student, index))}
               </ScrollView>
             </View>
-
-            {/* Student Rows */}
-            <ScrollView style={styles.studentsContainer} showsVerticalScrollIndicator={false}>
-              {selectedClass.students.map((student, index) => renderStudentRow(student, index))}
-            </ScrollView>
 
             {/* Legend */}
             <View style={[styles.legend, { backgroundColor: cardBackground }]}>
@@ -360,17 +413,7 @@ export default function StudentAttendance() {
             </ThemedText>
           </View>
         )}
-      </View>
-
-      {/* Fixed Bottom Button */}
-      <View style={[styles.buttonContainer, { backgroundColor: backgroundColor }]}>
-        <ThemedButton 
-          title="Back to Home" 
-          onPress={() => router.replace('/')}
-          variant="secondary"
-          style={styles.exitButton}
-        />
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -382,20 +425,38 @@ const styles = StyleSheet.create({
   fixedHeader: {
     paddingTop: 40,
     zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  header: {
+  headerWithBack: {
+    flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 20,
-    marginBottom: 20,
+    paddingVertical: 15,
+    marginBottom: 15,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  placeholder: {
+    width: 40, // Same width as back button to center the header
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   headerSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     opacity: 0.7,
   },
   inputSection: {
@@ -417,32 +478,33 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 50,
     paddingHorizontal: 15,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     fontSize: 16,
   },
   searchButton: {
     paddingHorizontal: 20,
+    borderRadius: 12,
   },
   suggestionsContainer: {
     position: 'absolute',
     top: 85,
     left: 20,
     right: 20,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     maxHeight: 200,
     zIndex: 1000,
-    elevation: 5,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowRadius: 8,
   },
   suggestionItem: {
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   suggestionCode: {
     fontSize: 16,
@@ -455,109 +517,113 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    paddingTop: 20,
+    paddingTop: 10,
   },
   spreadsheetContainer: {
     flex: 1,
-    marginHorizontal: 20,
-    overflow: 'hidden',
+    marginHorizontal: 16,
+    marginBottom: 20,
   },
   classInfo: {
-    marginBottom: 15,
+    marginBottom: 20,
     alignItems: 'center',
   },
   classTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  modernSpreadsheet: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    marginBottom: 20,
   },
   headerRow: {
     flexDirection: 'row',
-    marginBottom: 2,
-    overflow: 'hidden',
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   headerStickyColumn: {
-    borderTopLeftRadius: 8,
-    borderBottomLeftRadius: 8,
     paddingVertical: 15,
+    backgroundColor: 'rgba(0,0,0,0.05)',
   },
   headerScrollView: {
     flex: 1,
-    overflow: 'hidden',
   },
   dateHeaderRow: {
     flexDirection: 'row',
   },
   dateHeader: {
-    width: 60,
+    width: 70,
     paddingVertical: 15,
-    paddingHorizontal: 5,
+    paddingHorizontal: 8,
     alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.05)',
     borderLeftWidth: 1,
-    borderLeftColor: '#ddd',
-    marginHorizontal: 2,
-    minWidth: 60,
+    borderLeftColor: 'rgba(0,0,0,0.1)',
   },
   dateHeaderText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     textAlign: 'center',
   },
   headerText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
   },
   studentsContainer: {
-    flex: 1,
-    maxHeight: 300,
+    maxHeight: screenWidth > 400 ? 400 : 300,
   },
   studentRow: {
     flexDirection: 'row',
-    marginBottom: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
     minHeight: 60,
-    overflow: 'hidden',
   },
   stickyColumn: {
     width: screenWidth * 0.35,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     justifyContent: 'center',
-    borderRightWidth: 2,
-    borderRightColor: '#ddd',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    zIndex: 10,
-    position: 'relative',
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0,0,0,0.1)',
   },
   rollNoText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     marginBottom: 2,
   },
   studentNameText: {
-    fontSize: 11,
+    fontSize: 12,
     opacity: 0.8,
   },
   attendanceScrollView: {
     flex: 1,
-    overflow: 'hidden',
   },
   attendanceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
+    paddingHorizontal: 8,
   },
   attendanceCell: {
-    width: 60,
+    width: 70,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 2,
-    borderRadius: 6,
-    minWidth: 60,
+    marginHorizontal: 4,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
   attendanceCellText: {
     color: '#ffffff',
@@ -567,46 +633,45 @@ const styles = StyleSheet.create({
   legend: {
     flexDirection: 'row',
     justifyContent: 'center',
-    padding: 15,
-    borderRadius: 8,
-    marginTop: 15,
-    gap: 20,
+    padding: 20,
+    borderRadius: 16,
+    gap: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   legendColor: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     marginRight: 8,
   },
   legendText: {
     fontSize: 14,
+    fontWeight: '500',
   },
   noDataContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   noDataText: {
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 10,
+    fontWeight: '500',
   },
   availableClassesText: {
     fontSize: 14,
     opacity: 0.7,
     textAlign: 'center',
-  },
-  buttonContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    paddingBottom: 40,
-  },
-  exitButton: {
-    marginTop: 0,
   },
 });
