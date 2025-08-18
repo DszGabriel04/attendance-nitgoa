@@ -347,7 +347,9 @@ export default function StudentAttendance() {
             </View>
           )}
         </View>
-      </View>      {/* Scrollable Content Area */}
+      </View>
+      
+      {/* Scrollable Content Area */}
       <ScrollView style={styles.contentContainer} showsVerticalScrollIndicator={false}>
         {/* Attendance Spreadsheet */}
         {selectedClass && (
