@@ -16,16 +16,25 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedTextInput } from '@/components/ThemedTextInput';
 import { ThemedButton } from '@/components/ThemedButton';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { createClass, parseCSV } from '@/utils/api';
+
+interface StudentData {
+  id: string;
+  name: string;
+}
 
 export default function CreateClass() {
   const [className, setClassName] = useState('');
   const [classCode, setClassCode] = useState('');
   const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [parsedStudents, setParsedStudents] = useState<StudentData[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   
   const cardBackground = useThemeColor({}, 'cardBackground');
   const primaryColor = useThemeColor({}, 'buttonPrimary');
   const successColor = useThemeColor({}, 'success');
+  const errorColor = useThemeColor({}, 'danger');
 
   const handleFileUpload = async () => {
     try {
@@ -35,8 +44,37 @@ export default function CreateClass() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedFile(result.assets[0]);
-        Alert.alert('Success', 'CSV file selected successfully!');
+        const file = result.assets[0];
+        setSelectedFile(file);
+        
+        // Validate and parse CSV
+        setIsLoading(true);
+        try {
+          // Create a File object from the URI for parsing
+          const response = await fetch(file.uri);
+          const blob = await response.blob();
+          const csvFile = new File([blob], file.name, { type: file.mimeType || 'text/csv' });
+          
+          const parseResult = await parseCSV(csvFile);
+          
+          if (parseResult.success && parseResult.data) {
+            setParsedStudents(parseResult.data);
+            Alert.alert(
+              'Success', 
+              `CSV file validated successfully!\nFound ${parseResult.data.length} students.`
+            );
+          } else {
+            setSelectedFile(null);
+            setParsedStudents([]);
+            Alert.alert('CSV Validation Error', parseResult.error || 'Unknown error');
+          }
+        } catch (parseError) {
+          setSelectedFile(null);
+          setParsedStudents([]);
+          Alert.alert('Error', 'Failed to parse CSV file. Please check the file format.');
+        } finally {
+          setIsLoading(false);
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to select file. Please try again.');
@@ -54,38 +92,38 @@ export default function CreateClass() {
       return;
     }
 
-    if (!selectedFile) {
-      Alert.alert('Error', 'Please select a CSV file');
+    if (!selectedFile || parsedStudents.length === 0) {
+      Alert.alert('Error', 'Please select and validate a CSV file');
       return;
     }
 
+    setIsLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('className', className);
-      formData.append('classCode', classCode);
-      formData.append('csvFile', {
-        uri: selectedFile.uri,
-        type: selectedFile.mimeType || 'text/csv',
-        name: selectedFile.name,
-      } as any);
-
-      // Replace with your actual API endpoint
-      const response = await fetch('YOUR_API_ENDPOINT/create-class', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      if (response.ok) {
-        Alert.alert('Success', 'Class created successfully!');
-        router.push('/faculty-dashboard');
+      // For now, using a hardcoded faculty ID. In a real app, this would come from login/session
+      const facultyId = "FAC-101"; // This should be passed from login or stored in context
+      
+      const result = await createClass(classCode, className, facultyId, parsedStudents);
+      
+      if (result.success) {
+        // Show success message briefly and navigate back
+        Alert.alert(
+          'Success', 
+          result.message || 'Class created successfully! Returning to dashboard...',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.push('/faculty-dashboard')
+            }
+          ],
+          { cancelable: false }
+        );
       } else {
-        throw new Error('Failed to create class');
+        Alert.alert('Error', result.error || 'Failed to create class');
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to create class. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -137,16 +175,20 @@ export default function CreateClass() {
         </View>
 
         <ThemedButton
-          title={selectedFile ? `Selected: ${selectedFile.name}` : 'Select CSV File'}
+          title={isLoading ? 'Processing...' : (selectedFile ? `Selected: ${selectedFile.name}` : 'Select CSV File')}
           onPress={handleFileUpload}
           variant="success"
           style={styles.uploadButton}
+          disabled={isLoading}
         />
 
-        {selectedFile && (
+        {selectedFile && parsedStudents.length > 0 && (
           <View style={[styles.fileInfo, { backgroundColor: successColor + '20', borderLeftColor: successColor }]}>
             <ThemedText style={[styles.fileInfoText, { color: successColor }]}>
-              ✓ File selected: {selectedFile.name}
+              ✓ File validated: {selectedFile.name}
+            </ThemedText>
+            <ThemedText style={[styles.fileInfoText, { color: successColor }]}>
+              Students found: {parsedStudents.length}
             </ThemedText>
             <ThemedText style={[styles.fileInfoText, { color: successColor }]}>
               Size: {selectedFile.size !== undefined ? (selectedFile.size / 1024).toFixed(2) : 'N/A'} KB
@@ -154,10 +196,26 @@ export default function CreateClass() {
           </View>
         )}
 
+        {parsedStudents.length > 0 && (
+          <View style={[styles.previewContainer, { backgroundColor: cardBackground }]}>
+            <ThemedText style={styles.previewTitle}>Student Preview (First 5 students):</ThemedText>
+            {parsedStudents.slice(0, 5).map((student, index) => (
+              <ThemedText key={student.id} style={styles.previewItem}>
+                {index + 1}. {student.id} - {student.name}
+              </ThemedText>
+            ))}
+            {parsedStudents.length > 5 && (
+              <ThemedText style={styles.previewMore}>
+                ...and {parsedStudents.length - 5} more students
+              </ThemedText>
+            )}
+          </View>
+        )}
+
         <ThemedButton
-          title="CREATE CLASS"
+          title={isLoading ? "CREATING CLASS..." : "CREATE CLASS"}
           onPress={handleCreate}
-          disabled={!className.trim() || !classCode.trim() || !selectedFile}
+          disabled={!className.trim() || !classCode.trim() || !selectedFile || parsedStudents.length === 0 || isLoading}
           style={styles.createButton}
         />
       </ScrollView>
@@ -247,5 +305,31 @@ const styles = StyleSheet.create({
   },
   createButton: {
     marginBottom: 30
+  },
+  previewContainer: {
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  previewTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  previewItem: {
+    fontSize: 14,
+    marginBottom: 4,
+    opacity: 0.8,
+  },
+  previewMore: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    opacity: 0.7,
+    marginTop: 5,
   },
 });

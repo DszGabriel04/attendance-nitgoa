@@ -81,8 +81,56 @@ export async function getClasses(): Promise<ClassResponse[]> {
     throw error;
   }
 }
-export async function createClass(className: string, studentList: any) {
-  // TODO: Implement API call
+// Create class types
+interface StudentCreate {
+  id: string;      // roll number
+  name: string;
+}
+
+interface CreateClassRequest {
+  id: string;              // class ID
+  subject_name: string;
+  faculty_id: string;
+  students: StudentCreate[];
+}
+
+export async function createClass(classId: string, subjectName: string, facultyId: string, students: StudentCreate[]): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const requestData: CreateClassRequest = {
+      id: classId,
+      subject_name: subjectName,
+      faculty_id: facultyId,
+      students: students
+    };
+
+    const response = await fetch(`${API_BASE_URL}/classes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { 
+        success: false, 
+        error: errorData.detail || 'Failed to create class' 
+      };
+    }
+
+    const data = await response.json();
+    return { 
+      success: true, 
+      message: data.message 
+    };
+  } catch (error) {
+    console.error('Create class error:', error);
+    return { 
+      success: false, 
+      error: 'Network error. Please check if the server is running.' 
+    };
+  }
 }
 export async function deleteClass(classId: string) {
   // TODO: Implement API call
@@ -105,6 +153,90 @@ export async function getStudentAttendance(rollNumber: string) {
 export async function uploadCSV(file: any) {
   // TODO: Implement API call
 }
-export async function parseCSV(file: any) {
-  // TODO: Implement CSV parsing
+export async function parseCSV(file: File): Promise<{ success: boolean; data?: StudentCreate[]; error?: string }> {
+  try {
+    const text = await file.text();
+    const lines = text.trim().split('\n');
+    
+    if (lines.length < 2) {
+      return { success: false, error: 'CSV file must contain at least a header and one data row' };
+    }
+
+    // Validate header
+    const header = lines[0].trim();
+    const expectedHeader = 'RollNumber,Name,Category';
+    if (header !== expectedHeader) {
+      return { 
+        success: false, 
+        error: `Invalid CSV header. Expected: "${expectedHeader}", Found: "${header}"` 
+      };
+    }
+
+    const students: StudentCreate[] = [];
+    const errors: string[] = [];
+
+    // Parse data rows
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue; // Skip empty lines
+
+      const parts = line.split(',');
+      if (parts.length !== 3) {
+        errors.push(`Line ${i + 1}: Expected 3 columns, found ${parts.length}`);
+        continue;
+      }
+
+      const [rollNumber, name, category] = parts.map(part => part.trim());
+
+      // Validate each field
+      if (!rollNumber) {
+        errors.push(`Line ${i + 1}: RollNumber cannot be empty`);
+        continue;
+      }
+      if (!name) {
+        errors.push(`Line ${i + 1}: Name cannot be empty`);
+        continue;
+      }
+      if (!category) {
+        errors.push(`Line ${i + 1}: Category cannot be empty`);
+        continue;
+      }
+
+      // Check for duplicates
+      if (students.some(student => student.id === rollNumber)) {
+        errors.push(`Line ${i + 1}: Duplicate roll number "${rollNumber}"`);
+        continue;
+      }
+
+      students.push({
+        id: rollNumber,
+        name: name
+      });
+    }
+
+    if (errors.length > 0) {
+      return { 
+        success: false, 
+        error: `CSV validation errors:\n${errors.join('\n')}` 
+      };
+    }
+
+    if (students.length === 0) {
+      return { 
+        success: false, 
+        error: 'No valid student records found in CSV file' 
+      };
+    }
+
+    return { 
+      success: true, 
+      data: students 
+    };
+  } catch (error) {
+    console.error('CSV parsing error:', error);
+    return { 
+      success: false, 
+      error: 'Failed to parse CSV file. Please ensure it\'s a valid CSV format.' 
+    };
+  }
 }
