@@ -276,7 +276,7 @@ interface AttendanceSubmissionResponse {
   skipped: string[];
 }
 
-// Function to submit attendance for a class
+// Function to submit attendance for a class (POST - creates new attendance records)
 export async function submitAttendance(
   classId: string, 
   attendanceData: Record<string, string>
@@ -315,6 +315,58 @@ export async function submitAttendance(
     };
   } catch (error) {
     console.error('Error submitting attendance:', error);
+    return { 
+      success: false, 
+      error: 'Network error. Please check if the server is running.' 
+    };
+  }
+}
+
+// Update attendance response type
+interface UpdateAttendanceResponse {
+  message: string;
+  errors: string[];
+}
+
+// Function to update existing attendance for a class (PUT - updates existing attendance records)
+export async function updateAttendance(
+  classId: string, 
+  attendanceData: Record<string, string>
+): Promise<{ success: boolean; data?: UpdateAttendanceResponse; error?: string }> {
+  try {
+    // Convert frontend attendance format to backend format
+    const attendees: AttendanceItem[] = Object.entries(attendanceData).map(([studentId, status]) => ({
+      student_id: studentId,
+      present: status === 'present'
+    }));
+
+    const requestData: AttendanceSubmissionRequest = {
+      attendees
+    };
+
+    const response = await fetch(`${API_BASE_URL}/classes/${classId}/attendance`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { 
+        success: false, 
+        error: errorData.detail || 'Failed to update attendance' 
+      };
+    }
+
+    const data: UpdateAttendanceResponse = await response.json();
+    return { 
+      success: true, 
+      data: data 
+    };
+  } catch (error) {
+    console.error('Error updating attendance:', error);
     return { 
       success: false, 
       error: 'Network error. Please check if the server is running.' 

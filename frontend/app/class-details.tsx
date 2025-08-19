@@ -331,7 +331,7 @@ export default function ClassDetails() {
       <View style={styles.buttonContainer}>
         <TouchableOpacity 
           style={[styles.actionButton, styles.primaryButton, { backgroundColor: primaryColor }]}
-          onPress={() => setShowAttendance(true)}
+          onPress={() => router.push({ pathname: '/add-attendance', params: { classId: classId } })}
         >
           <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
           <ThemedText style={styles.primaryButtonText}>Take Attendance</ThemedText>

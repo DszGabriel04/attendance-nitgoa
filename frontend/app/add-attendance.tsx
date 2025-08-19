@@ -1,5 +1,5 @@
 //add-attendance.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -7,52 +7,27 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
-  SafeAreaView,
   StatusBar,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useThemeColor } from '@/hooks/useThemeColor';
-
-const dummyStudents = {
-  "class_code": "CS101",
-  "attendance_history": [
-    {
-      "date": "2025-08-15",
-      "student_id": "101",
-      "student_name": "Alice",
-      "status": "P"
-    },
-    {
-      "date": "2025-08-15",
-      "student_id": "102",
-      "student_name": "Bob",
-      "status": "A"
-    },
-    {
-      "date": "2025-08-16",
-      "student_id": "101",
-      "student_name": "Alice",
-      "status": "P"
-    },
-    {
-      "date": "2025-08-16",
-      "student_id": "102",
-      "student_name": "Bob",
-      "status": "P"
-    }
-  ]
-};
+import { getClassStudentsFromHistory, getClasses, submitAttendance, updateAttendance } from '@/utils/api';
 
 export default function AttendanceUI() {
   const router = useRouter();
+  const { classId } = useLocalSearchParams<{ classId: string }>();
+  
   // Always use today's date
   const today = new Date();
   const [attendance, setAttendance] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const classId = dummyStudents.class_code;
+  const [isLoading, setIsLoading] = useState(true);
+  const [students, setStudents] = useState<Array<{ id: string; name: string }>>([]);
+  const [attendanceTaken, setAttendanceTaken] = useState<string>('No');
+  const [classSubject, setClassSubject] = useState<string>('');
   
   // Theme colors
   const backgroundColor = useThemeColor({}, 'background');
@@ -61,12 +36,61 @@ export default function AttendanceUI() {
   const successColor = useThemeColor({}, 'success');
   const dangerColor = useThemeColor({}, 'danger');
 
-  // Get unique students from attendance_history
-  const students = Array.from(
-    new Map(
-      dummyStudents.attendance_history.map(s => [s.student_id, { id: s.student_id, name: s.student_name }])
-    ).values()
-  );
+  // Fetch class data and students on component mount
+  useEffect(() => {
+    const fetchClassData = async () => {
+      if (!classId) {
+        Alert.alert('Error', 'Class ID not provided');
+        router.back();
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        
+        // Fetch class info to check if attendance is taken
+        const classesResult = await getClasses();
+        const currentClass = classesResult.find(cls => cls.id === classId);
+        
+        if (!currentClass) {
+          Alert.alert('Error', 'Class not found');
+          router.back();
+          return;
+        }
+
+        setClassSubject(currentClass.subject_name);
+        setAttendanceTaken(currentClass.attendance_taken);
+
+        // Fetch students for this class
+        const studentsResult = await getClassStudentsFromHistory(classId);
+        
+        if (!studentsResult.success) {
+          Alert.alert('Error', studentsResult.error || 'Failed to fetch students');
+          return;
+        }
+
+        if (!studentsResult.students || studentsResult.students.length === 0) {
+          Alert.alert('Warning', 'No students found for this class');
+          return;
+        }
+
+        // Convert to expected format
+        const studentsList = studentsResult.students.map(student => ({
+          id: student.roll,
+          name: student.name
+        }));
+
+        setStudents(studentsList);
+      } catch (error) {
+        console.error('Error fetching class data:', error);
+        Alert.alert('Error', 'Failed to load class data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchClassData();
+  }, [classId, router]);
 
   const handleAttendanceChange = (studentId: string, status: string) => {
     setAttendance(prev => ({
@@ -90,57 +114,62 @@ export default function AttendanceUI() {
       return;
     }
 
+    if (!classId) {
+      Alert.alert('Error', 'Class ID is missing');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      // Replace with your actual API endpoint
-      const response = await fetch('https://your-api.com/api/attendance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          classId,
-          date: today.toISOString().split('T')[0],
-          attendance
-        }),
-      });
-      if (response.ok) {
-        Alert.alert('Success', 'Attendance submitted successfully!', [
-          { 
-            text: 'OK', 
-            onPress: () => {
-              try {
-                router.back();
-              } catch (error) {
-                // Fallback navigation
-                router.push('/'); // or whatever your main screen route is
-              }
-            }
-          }
-        ]);
+      let result;
+      
+      // Use POST (submitAttendance) if attendance not taken, PUT (updateAttendance) if already taken
+      if (attendanceTaken === 'No') {
+        result = await submitAttendance(classId, attendance);
       } else {
-        throw new Error('Failed to submit attendance');
+        result = await updateAttendance(classId, attendance);
+      }
+
+      if (result.success) {
+        // Navigate immediately to dashboard
+        try {
+          router.push('/faculty-dashboard');
+        } catch (error) {
+          // Fallback navigation
+          router.push('/');
+        }
+      } else {
+        throw new Error(result.error || `Failed to ${attendanceTaken === 'No' ? 'submit' : 'update'} attendance`);
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      Alert.alert('Error', 'Failed to submit attendance: ' + errorMsg);
+      Alert.alert('Error', `Failed to ${attendanceTaken === 'No' ? 'submit' : 'update'} attendance: ` + errorMsg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Date picker removed, always use today's date
-
   const presentCount = Object.values(attendance).filter(status => status === 'present').length;
   const absentCount = Object.values(attendance).filter(status => status === 'absent').length;
+
+  // Safety check for classId
+  if (!classId) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ThemedText style={styles.loadingText}>Invalid class ID</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
 
   type Student = { id: string; name: string };
 
   const renderStudent = ({ item }: { item: Student }) => (
     <View style={[styles.studentCard, { backgroundColor: cardBackground }]}>
       <View style={styles.studentInfo}>
-        <ThemedText style={styles.studentName}>{item.name}</ThemedText>
-        <ThemedText style={styles.studentRoll}>ID: {item.id}</ThemedText>
+        <ThemedText style={styles.studentName}>{item?.name || 'Unknown'}</ThemedText>
+        <ThemedText style={styles.studentRoll}>ID: {item?.id || 'Unknown'}</ThemedText>
       </View>
       <View style={styles.attendanceButtons}>
         <TouchableOpacity
@@ -202,71 +231,93 @@ export default function AttendanceUI() {
         
         <View style={styles.headerInfo}>
           <ThemedText style={styles.title}>Attendance</ThemedText>
-          <ThemedText style={styles.classInfo}>Class: {classId}</ThemedText>
+          <ThemedText style={styles.classInfo}>Class: {String(classId)}</ThemedText>
+          {classSubject && <ThemedText style={styles.subjectInfo}>{String(classSubject)}</ThemedText>}
         </View>
       </View>
 
-      {/* Date Display (no picker) */}
-      <View style={styles.dateSection}>
-        <View style={[styles.dateButton, { backgroundColor: cardBackground }]}>
-          <Ionicons name="calendar-outline" size={20} color={useThemeColor({}, 'icon')} />
-          <ThemedText style={styles.dateText}>{today.toDateString()}</ThemedText>
+      {/* Loading State */}
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={primaryColor} />
+          <ThemedText style={styles.loadingText}>Loading class data...</ThemedText>
         </View>
-      </View>
-
-      {/* Stats */}
-      <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { backgroundColor: cardBackground }]}>
-          <View style={styles.statHeader}>
-            <Ionicons name="checkmark-circle" size={20} color={successColor} />
-            <ThemedText style={styles.statLabel}>Present</ThemedText>
+      ) : (
+        <>
+          {/* Date Display (no picker) */}
+          <View style={styles.dateSection}>
+            <View style={[styles.dateButton, { backgroundColor: cardBackground }]}>
+              <Ionicons name="calendar-outline" size={20} color={useThemeColor({}, 'icon')} />
+              <ThemedText style={styles.dateText}>{today.toDateString()}</ThemedText>
+            </View>
+            <View style={[styles.statusBadge, { 
+              backgroundColor: attendanceTaken === 'Yes' ? successColor : dangerColor 
+            }]}>
+              <ThemedText style={styles.statusText}>
+                {attendanceTaken === 'Yes' ? 'Updating Attendance' : 'Taking Attendance'}
+              </ThemedText>
+            </View>
           </View>
-          <ThemedText style={styles.statNumber}>{presentCount}</ThemedText>
-        </View>
-        
-        <View style={[styles.statCard, { backgroundColor: cardBackground }]}>
-          <View style={styles.statHeader}>
-            <Ionicons name="close-circle" size={20} color={dangerColor} />
-            <ThemedText style={styles.statLabel}>Absent</ThemedText>
-          </View>
-          <ThemedText style={styles.statNumber}>{absentCount}</ThemedText>
-        </View>
-      </View>
 
-      {/* Student List */}
-      <View style={styles.listHeader}>
-        <Ionicons name="people-outline" size={20} color={useThemeColor({}, 'icon')} />
-        <ThemedText style={styles.listHeaderText}>Students</ThemedText>
-      </View>
-      
-      <FlatList
-        data={students}
-        keyExtractor={(item) => item.id}
-        renderItem={renderStudent}
-        style={styles.list}
-        showsVerticalScrollIndicator={false}
-      />
-
-      {/* Submit Button */}
-      <TouchableOpacity
-        onPress={handleSubmit}
-        disabled={isSubmitting || Object.keys(attendance).length === 0}
-        style={[
-          styles.submitButton,
-          { backgroundColor: primaryColor },
-          (isSubmitting || Object.keys(attendance).length === 0) && styles.disabledButton
-        ]}
-        activeOpacity={0.8}
-      >
-        {isSubmitting ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#fff" />
-            <ThemedText style={styles.submitButtonText}>Submitting...</ThemedText>
+          {/* Stats */}
+          <View style={styles.statsContainer}>
+            <View style={[styles.statCard, { backgroundColor: cardBackground }]}>
+              <View style={styles.statHeader}>
+                <Ionicons name="checkmark-circle" size={20} color={successColor} />
+                <ThemedText style={styles.statLabel}>Present</ThemedText>
+              </View>
+              <ThemedText style={styles.statNumber}>{presentCount || 0}</ThemedText>
+            </View>
+            
+            <View style={[styles.statCard, { backgroundColor: cardBackground }]}>
+              <View style={styles.statHeader}>
+                <Ionicons name="close-circle" size={20} color={dangerColor} />
+                <ThemedText style={styles.statLabel}>Absent</ThemedText>
+              </View>
+              <ThemedText style={styles.statNumber}>{absentCount || 0}</ThemedText>
+            </View>
           </View>
-        ) : (
-          <ThemedText style={styles.submitButtonText}>Submit Attendance</ThemedText>
-        )}
-      </TouchableOpacity>
+
+          {/* Student List */}
+          <View style={styles.listHeader}>
+            <Ionicons name="people-outline" size={20} color={useThemeColor({}, 'icon')} />
+            <ThemedText style={styles.listHeaderText}>Students ({students?.length || 0})</ThemedText>
+          </View>
+          
+          <FlatList
+            data={students || []}
+            keyExtractor={(item) => item.id}
+            renderItem={renderStudent}
+            style={styles.list}
+            showsVerticalScrollIndicator={false}
+          />
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            onPress={handleSubmit}
+            disabled={isSubmitting || Object.keys(attendance).length === 0}
+            style={[
+              styles.submitButton,
+              { backgroundColor: primaryColor },
+              (isSubmitting || Object.keys(attendance).length === 0) && styles.disabledButton
+            ]}
+            activeOpacity={0.8}
+          >
+            {isSubmitting ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#fff" />
+                <ThemedText style={styles.submitButtonText}>
+                  {attendanceTaken === 'Yes' ? 'Updating...' : 'Submitting...'}
+                </ThemedText>
+              </View>
+            ) : (
+              <ThemedText style={styles.submitButtonText}>
+                {attendanceTaken === 'Yes' ? 'Update Attendance' : 'Submit Attendance'}
+              </ThemedText>
+            )}
+          </TouchableOpacity>
+        </>
+      )}
     </ThemedView>
   );
 }
@@ -310,6 +361,22 @@ const styles = StyleSheet.create({
     marginTop: 4,
     opacity: 0.7,
   },
+  subjectInfo: {
+    fontSize: 12,
+    marginTop: 2,
+    opacity: 0.6,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
   dateSection: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -328,10 +395,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    marginBottom: 8,
   },
   dateText: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -459,10 +538,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
 });
