@@ -1,5 +1,5 @@
 // class-details.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   TouchableOpacity, 
@@ -16,14 +16,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { getClassStudentsFromHistory, submitAttendance } from '@/utils/api';
 
-const dummyStudents = [
-  { roll: '101', name: 'Alice Johnson' },
-  { roll: '102', name: 'Bob Smith' },
-  { roll: '103', name: 'Charlie Brown' },
-  { roll: '104', name: 'Diana Prince' },
-  { roll: '105', name: 'Edward Norton' },
-];
+type Student = { roll: string; name: string };
 
 export default function ClassDetails() {
   const router = useRouter();
@@ -32,6 +27,10 @@ export default function ClassDetails() {
   const [showAttendance, setShowAttendance] = useState(false);
   const [attendance, setAttendance] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(true);
+  const [studentsError, setStudentsError] = useState<string | null>(null);
+
   
   // Theme colors
   const backgroundColor = useThemeColor({}, 'background');
@@ -41,6 +40,39 @@ export default function ClassDetails() {
   const successColor = useThemeColor({}, 'success');
 
   const today = new Date();
+
+  // Fetch students when component mounts
+  useEffect(() => {
+    const fetchStudents = async () => {
+      if (!classId || typeof classId !== 'string') {
+        setStudentsError('Invalid class ID');
+        setIsLoadingStudents(false);
+        return;
+      }
+
+      try {
+        setIsLoadingStudents(true);
+        setStudentsError(null);
+        
+        const result = await getClassStudentsFromHistory(classId);
+        
+        if (result.success && result.students) {
+          setStudents(result.students);
+        } else {
+          setStudentsError(result.error || 'Failed to load students');
+          setStudents([]); // Set empty array as fallback
+        }
+      } catch (error) {
+        console.error('Error fetching students:', error);
+        setStudentsError('Network error occurred');
+        setStudents([]);
+      } finally {
+        setIsLoadingStudents(false);
+      }
+    };
+
+    fetchStudents();
+  }, [classId]);
 
   const handleDeleteClass = () => {
     setDeleteModalVisible(false);
@@ -63,22 +95,24 @@ export default function ClassDetails() {
       return;
     }
 
+    if (!classId || typeof classId !== 'string') {
+      Alert.alert('Error', 'Invalid class ID');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      // Replace with your actual API endpoint
-      const response = await fetch('https://your-api.com/api/attendance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          classId,
-          date: today.toISOString().split('T')[0],
-          attendance
-        }),
-      });
-      if (response.ok) {
-        Alert.alert('Success', 'Attendance submitted successfully!', [
+      const result = await submitAttendance(classId, attendance);
+      
+      if (result.success && result.data) {
+        const { created, skipped } = result.data;
+        let message = `Attendance submitted successfully!\n${created} record(s) created.`;
+        
+        if (skipped.length > 0) {
+          message += `\n\nSkipped:\n${skipped.join('\n')}`;
+        }
+        
+        Alert.alert('Success', message, [
           { 
             text: 'OK', 
             onPress: () => {
@@ -88,7 +122,7 @@ export default function ClassDetails() {
           }
         ]);
       } else {
-        throw new Error('Failed to submit attendance');
+        throw new Error(result.error || 'Failed to submit attendance');
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -100,8 +134,6 @@ export default function ClassDetails() {
 
   const presentCount = Object.values(attendance).filter(status => status === 'present').length;
   const absentCount = Object.values(attendance).filter(status => status === 'absent').length;
-
-  type Student = { roll: string; name: string };
 
   const renderStudent = ({
     item,
@@ -220,7 +252,7 @@ export default function ClassDetails() {
         </View>
         
         <FlatList
-          data={dummyStudents}
+          data={students}
           keyExtractor={(item) => item.roll}
           renderItem={renderAttendanceStudent}
           style={styles.list}
@@ -277,7 +309,7 @@ export default function ClassDetails() {
         </TouchableOpacity>
       </View>
 
-      {/* Single Action Button */}
+      {/* Take Attendance Button */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity 
           style={[styles.actionButton, styles.primaryButton, { backgroundColor: primaryColor }]}
@@ -290,22 +322,79 @@ export default function ClassDetails() {
 
       {/* Students Table */}
       <View style={[styles.tableContainer, { backgroundColor: cardBackground }]}>
-        <ThemedText style={styles.tableTitle}>Students ({dummyStudents.length})</ThemedText>
+        <ThemedText style={styles.tableTitle}>
+          Students ({isLoadingStudents ? '...' : students.length})
+        </ThemedText>
         
-        {/* Table Header */}
-        <View style={[styles.tableHeader, { backgroundColor: backgroundColor }]}>
-          <ThemedText style={styles.headerCell}>Roll No.</ThemedText>
-          <ThemedText style={styles.headerCell}>Name</ThemedText>
-        </View>
+        {isLoadingStudents ? (
+          <View style={styles.studentsLoadingContainer}>
+            <ActivityIndicator size="large" color={primaryColor} />
+            <ThemedText style={styles.loadingText}>Loading students...</ThemedText>
+          </View>
+        ) : studentsError ? (
+          <View style={styles.errorContainer}>
+            <Ionicons name="warning-outline" size={24} color={dangerColor} />
+            <ThemedText style={styles.errorText}>{studentsError}</ThemedText>
+            <TouchableOpacity 
+              style={[styles.retryButton, { backgroundColor: primaryColor }]}
+              onPress={() => {
+                // Trigger re-fetch by changing a dependency
+                const fetchStudents = async () => {
+                  if (!classId || typeof classId !== 'string') return;
+                  
+                  try {
+                    setIsLoadingStudents(true);
+                    setStudentsError(null);
+                    
+                    const result = await getClassStudentsFromHistory(classId);
+                    
+                    if (result.success && result.students) {
+                      setStudents(result.students);
+                    } else {
+                      setStudentsError(result.error || 'Failed to load students');
+                      setStudents([]);
+                    }
+                  } catch (error) {
+                    console.error('Error fetching students:', error);
+                    setStudentsError('Network error occurred');
+                    setStudents([]);
+                  } finally {
+                    setIsLoadingStudents(false);
+                  }
+                };
+                fetchStudents();
+              }}
+            >
+              <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            {/* Table Header */}
+            <View style={[styles.tableHeader, { backgroundColor: backgroundColor }]}>
+              <ThemedText style={styles.headerCell}>Roll No.</ThemedText>
+              <ThemedText style={styles.headerCell}>Name</ThemedText>
+            </View>
 
-        {/* Students List */}
-        <FlatList
-          data={dummyStudents}
-          keyExtractor={item => item.roll}
-          renderItem={renderStudent}
-          showsVerticalScrollIndicator={false}
-          style={styles.studentsList}
-        />
+            {/* Students List */}
+            <FlatList
+              data={students}
+              keyExtractor={item => item.roll}
+              renderItem={renderStudent}
+              showsVerticalScrollIndicator={false}
+              style={styles.studentsList}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="people-outline" size={48} color={useThemeColor({}, 'icon')} style={{ opacity: 0.3 }} />
+                  <ThemedText style={styles.emptyText}>No students found</ThemedText>
+                  <ThemedText style={styles.emptySubText}>
+                    This class may not have any attendance records yet
+                  </ThemedText>
+                </View>
+              }
+            />
+          </>
+        )}
       </View>
 
       {/* Delete Confirmation Modal */}
@@ -729,5 +818,61 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  
+  // Loading and error states
+  studentsLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 12,
+    opacity: 0.7,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    marginTop: 12,
+    marginBottom: 16,
+    textAlign: 'center',
+    opacity: 0.8,
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubText: {
+    fontSize: 14,
+    opacity: 0.6,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

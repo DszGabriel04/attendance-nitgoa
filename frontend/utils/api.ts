@@ -150,6 +150,150 @@ export async function getStudentAttendance(rollNumber: string) {
   // TODO: Implement API call
   return [];
 }
+
+// Attendance history types
+interface AttendanceRecord {
+  date: string;
+  student_id: string;
+  student_name: string;
+  status: string; // "P" or "A"
+}
+
+interface AttendanceHistoryResponse {
+  class_code: string;
+  attendance_history: AttendanceRecord[];
+}
+
+// Function to get attendance history for a class
+export async function getAttendanceHistory(classId: string): Promise<{ success: boolean; data?: AttendanceHistoryResponse; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/attendance/history/${classId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data: AttendanceHistoryResponse = await response.json();
+    return { 
+      success: true, 
+      data: data 
+    };
+  } catch (error) {
+    console.error('Error fetching attendance history:', error);
+    return { 
+      success: false, 
+      error: 'Failed to fetch attendance history. Please check if the server is running.' 
+    };
+  }
+}
+
+// Function to get unique students from attendance history (for class details)
+export async function getClassStudentsFromHistory(classId: string): Promise<{ success: boolean; students?: Array<{roll: string, name: string}>; error?: string }> {
+  try {
+    const historyResult = await getAttendanceHistory(classId);
+    
+    if (!historyResult.success || !historyResult.data) {
+      return { 
+        success: false, 
+        error: historyResult.error || 'Failed to fetch attendance history' 
+      };
+    }
+
+    // Extract unique students from attendance history
+    const studentsMap = new Map<string, string>();
+    
+    historyResult.data.attendance_history.forEach(record => {
+      if (!studentsMap.has(record.student_id)) {
+        studentsMap.set(record.student_id, record.student_name);
+      }
+    });
+
+    const students = Array.from(studentsMap.entries()).map(([roll, name]) => ({
+      roll,
+      name
+    }));
+
+    return { 
+      success: true, 
+      students: students 
+    };
+  } catch (error) {
+    console.error('Error extracting students from attendance history:', error);
+    return { 
+      success: false, 
+      error: 'Failed to process attendance data' 
+    };
+  }
+}
+
+// Attendance submission types
+interface AttendanceItem {
+  student_id: string;
+  present: boolean;
+}
+
+interface AttendanceSubmissionRequest {
+  attendees: AttendanceItem[];
+}
+
+interface AttendanceSubmissionResponse {
+  message: string;
+  class_id: string;
+  date: string;
+  created: number;
+  skipped: string[];
+}
+
+// Function to submit attendance for a class
+export async function submitAttendance(
+  classId: string, 
+  attendanceData: Record<string, string>
+): Promise<{ success: boolean; data?: AttendanceSubmissionResponse; error?: string }> {
+  try {
+    // Convert frontend attendance format to backend format
+    const attendees: AttendanceItem[] = Object.entries(attendanceData).map(([studentId, status]) => ({
+      student_id: studentId,
+      present: status === 'present'
+    }));
+
+    const requestData: AttendanceSubmissionRequest = {
+      attendees
+    };
+
+    const response = await fetch(`${API_BASE_URL}/classes/${classId}/attendence`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { 
+        success: false, 
+        error: errorData.detail || 'Failed to submit attendance' 
+      };
+    }
+
+    const data: AttendanceSubmissionResponse = await response.json();
+    return { 
+      success: true, 
+      data: data 
+    };
+  } catch (error) {
+    console.error('Error submitting attendance:', error);
+    return { 
+      success: false, 
+      error: 'Network error. Please check if the server is running.' 
+    };
+  }
+}
 export async function uploadCSV(file: any) {
   // TODO: Implement API call
 }
