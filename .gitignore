@@ -1,1 +1,12 @@
 venv/
+*/__pycache__/
+
+
+# Frontend stuff
+frontend/node_modules/
+*/.vscode/
+sbox/
+
+# Expo stuff
+frontend/.expo/
+frontend/expo-env.d.ts
