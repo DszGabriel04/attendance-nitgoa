@@ -12,7 +12,7 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["attendance-nitgoa.vercel.app", "attendance-nitgoa-jkm71scqp-russells-projects-bb2412f0.vercel.app"],  # In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
