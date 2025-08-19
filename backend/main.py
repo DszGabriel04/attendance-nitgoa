@@ -12,11 +12,15 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["attendance-nitgoa.vercel.app", "attendance-nitgoa-jkm71scqp-russells-projects-bb2412f0.vercel.app"],  # In production, replace with specific origins
+    allow_origins=[
+        "https://attendance-nitgoa.vercel.app",
+        "https://attendance-nitgoa-jkm71scqp-russells-projects-bb2412f0.vercel.app",
+    ],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 def get_db():                   # Dependency to get DB session
     db = models.SessionLocal()
