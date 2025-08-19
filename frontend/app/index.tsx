@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, StatusBar, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import "expo-router/entry";
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedTextInput } from '@/components/ThemedTextInput';
