@@ -1,22 +1,22 @@
 // class-details.tsx
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  TouchableOpacity, 
-  FlatList, 
-  StyleSheet, 
-  SafeAreaView, 
-  StatusBar,
-  Modal,
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
   Alert,
-  ActivityIndicator
+  Modal,
+  ActivityIndicator,
+  StatusBar,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { getClassStudentsFromHistory, submitAttendance } from '@/utils/api';
+import { getClassStudentsFromHistory, submitAttendance, deleteClass } from '@/utils/api';
 
 type Student = { roll: string; name: string };
 
@@ -74,12 +74,30 @@ export default function ClassDetails() {
     fetchStudents();
   }, [classId]);
 
-  const handleDeleteClass = () => {
+  const handleDeleteClass = async () => {
     setDeleteModalVisible(false);
-    // Add your delete logic here
-    Alert.alert('Success', 'Class deleted successfully', [
-      { text: 'OK', onPress: () => router.back() }
-    ]);
+    
+    if (!classId || typeof classId !== 'string') {
+      Alert.alert('Error', 'Invalid class ID');
+      return;
+    }
+
+    // Navigate back to dashboard immediately
+    router.push('/faculty-dashboard?refresh=true');
+
+    try {
+      const result = await deleteClass(classId);
+      
+      if (!result.success) {
+        // If deletion failed, show error but user is already back at dashboard
+        Alert.alert('Error', result.error || 'Failed to delete class');
+      }
+      // No success alert needed since user is already back at dashboard
+      // and the refresh will show the updated list
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      Alert.alert('Error', 'Failed to delete class: ' + errorMsg);
+    }
   };
 
   const handleAttendanceChange = (studentId: string, status: string) => {

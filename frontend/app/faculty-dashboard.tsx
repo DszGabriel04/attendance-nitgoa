@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { ColorPicker } from '../utils/ColorPicker';
 import { View, TouchableOpacity, FlatList, StyleSheet, StatusBar, SafeAreaView, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -18,6 +19,7 @@ interface ClassItem {
 
 export default function FacultyDashboard() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const backgroundColor = useThemeColor({}, 'background');
   const cardBackground = useThemeColor({}, 'cardBackground');
   const primaryColor = useThemeColor({}, 'buttonPrimary');
@@ -26,11 +28,25 @@ export default function FacultyDashboard() {
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const colorPicker = new ColorPicker();
 
+  // Focus effect to refresh when returning from other screens
+  useFocusEffect(
+    useCallback(() => {
+      fetchClasses();
+    }, [])
+  );
+
+  // Handle refresh parameter
   useEffect(() => {
-    fetchClasses();
-  }, []);
+    if (params.refresh === 'true') {
+      setRefreshing(true);
+      fetchClasses().finally(() => setRefreshing(false));
+      // Clear the refresh parameter by replacing the current route
+      router.replace('/faculty-dashboard');
+    }
+  }, [params.refresh]);
 
   const fetchClasses = async () => {
     try {
@@ -132,8 +148,11 @@ export default function FacultyDashboard() {
           renderItem={renderClassItem}
           contentContainerStyle={styles.classesContainer}
           showsVerticalScrollIndicator={false}
-          refreshing={loading}
-          onRefresh={fetchClasses}
+          refreshing={loading || refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            fetchClasses().finally(() => setRefreshing(false));
+          }}
         />
       )}
 

@@ -132,8 +132,35 @@ export async function createClass(classId: string, subjectName: string, facultyI
     };
   }
 }
-export async function deleteClass(classId: string) {
-  // TODO: Implement API call
+export async function deleteClass(classId: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/classes/${classId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { 
+        success: false, 
+        error: errorData.detail || 'Failed to delete class' 
+      };
+    }
+
+    const data = await response.json();
+    return { 
+      success: true, 
+      message: data.message 
+    };
+  } catch (error) {
+    console.error('Delete class error:', error);
+    return { 
+      success: false, 
+      error: 'Network error. Please check if the server is running.' 
+    };
+  }
 }
 export async function getClassStudents(classId: string) {
   // TODO: Implement API call
