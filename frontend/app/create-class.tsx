@@ -105,18 +105,8 @@ export default function CreateClass() {
       const result = await createClass(classCode, className, facultyId, parsedStudents);
       
       if (result.success) {
-        // Show success message briefly and navigate back
-        Alert.alert(
-          'Success', 
-          result.message || 'Class created successfully! Returning to dashboard...',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.push('/faculty-dashboard')
-            }
-          ],
-          { cancelable: false }
-        );
+        // Navigate directly to faculty dashboard without alert
+        router.push('/faculty-dashboard');
       } else {
         Alert.alert('Error', result.error || 'Failed to create class');
       }
