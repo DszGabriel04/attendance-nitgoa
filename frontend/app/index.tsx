@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, StatusBar, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedTextInput } from '@/components/ThemedTextInput';
 import { ThemedButton } from '@/components/ThemedButton';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { loginFaculty } from '@/utils/api';
 
 export default function LoginScreen() {
   const [role, setRole] = useState<'faculty' | 'student' | null>(null);
@@ -13,6 +14,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [rollNumber, setRollNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const router = useRouter();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -31,18 +33,30 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     setIsLoading(true);
+    setLoginError(null);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
       if (role === 'faculty') {
-        // TODO: loginFaculty(username, password)
-        router.push('/faculty-dashboard');
+        const result = await loginFaculty(username, password);
+        
+        if (result.success) {
+          // Store faculty ID if needed (you might want to use AsyncStorage or context)
+          router.push('/faculty-dashboard');
+        } else {
+          setLoginError(result.error || 'Login failed');
+        }
       } else if (role === 'student') {
-        // TODO: loginStudent(rollNumber)
+        // TODO: Implement student login
         router.push('/student-attendance');
       }
+    } catch (error) {
+      // Make sure we only set string errors, not objects
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      setLoginError(errorMessage);
+      console.error('Login error:', error);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const isFormValid = () => {
@@ -100,14 +114,24 @@ export default function LoginScreen() {
 
           {role && (
             <Animated.View style={[styles.formContainer, { opacity: fadeAnim }]}>
+              {loginError && (
+                <View style={styles.errorContainer}>
+                  <ThemedText style={styles.errorText}>{loginError}</ThemedText>
+                </View>
+              )}
+              
               {role === 'faculty' ? (
                 <>
                   <View style={styles.inputContainer}>
                     <ThemedTextInput
-                      placeholder="Username"
+                      placeholder="Email"
                       value={username}
-                      onChangeText={setUsername}
+                      onChangeText={(text) => {
+                        setUsername(text);
+                        setLoginError(null); // Clear error when user types
+                      }}
                       autoCapitalize="none"
+                      keyboardType="email-address"
                     />
                   </View>
                   
@@ -115,7 +139,10 @@ export default function LoginScreen() {
                     <ThemedTextInput
                       placeholder="Password"
                       value={password}
-                      onChangeText={setPassword}
+                      onChangeText={(text) => {
+                        setPassword(text);
+                        setLoginError(null); // Clear error when user types
+                      }}
                       secureTextEntry
                     />
                   </View>
@@ -125,7 +152,10 @@ export default function LoginScreen() {
                   <ThemedTextInput
                     placeholder="Roll Number"
                     value={rollNumber}
-                    onChangeText={setRollNumber}
+                    onChangeText={(text) => {
+                      setRollNumber(text);
+                      setLoginError(null); // Clear error when user types
+                    }}
                     autoCapitalize="characters"
                   />
                 </View>
@@ -238,5 +268,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
+  },
+  errorContainer: {
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.3)',
+  },
+  errorText: {
+    color: '#dc2626',
+    fontSize: 14,
+    textAlign: 'center',
+    fontWeight: '500',
   },
 });

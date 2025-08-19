@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Path
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, case, select
 from sqlalchemy.orm import Session
 import models, schemas
@@ -7,6 +8,15 @@ from schemas import AttendanceRequest
 from datetime import date
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def get_db():                   # Dependency to get DB session
     db = models.SessionLocal()
