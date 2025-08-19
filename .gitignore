@@ -6,6 +6,7 @@ venv/
 frontend/node_modules/
 */.vscode/
 sbox/
+frontend/.env
 
 # Expo stuff
 frontend/.expo/
