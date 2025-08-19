@@ -12,6 +12,12 @@ interface FacultyLoginRequest {
   password: string;
 }
 
+interface ClassResponse {
+  id: string;
+  subject_name: string;
+  attendance_taken: string; // "Yes" or "No"
+}
+
 // API stub functions for backend integration
 export async function loginFaculty(username: string, password: string): Promise<{ success: boolean; facultyId?: string; error?: string }> {
   try {
@@ -55,9 +61,25 @@ export async function loginStudent(rollNumber: string) {
 export async function logout() {
   // TODO: Implement API call
 }
-export async function getClasses() {
-  // TODO: Implement API call
-  return [];
+export async function getClasses(): Promise<ClassResponse[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/classes`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data: ClassResponse[] = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching classes:', error);
+    throw error;
+  }
 }
 export async function createClass(className: string, studentList: any) {
   // TODO: Implement API call

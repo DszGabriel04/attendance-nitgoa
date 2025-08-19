@@ -1,36 +1,20 @@
 // faculty-dashboard.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ColorPicker } from '../utils/ColorPicker';
-import { View, TouchableOpacity, FlatList, StyleSheet, StatusBar, SafeAreaView } from 'react-native';
+import { View, TouchableOpacity, FlatList, StyleSheet, StatusBar, SafeAreaView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { getClasses } from '../utils/api';
 
-const rawClasses = [
-  {
-    id: "CS101",
-    subject_name: "Computer Science Fundamentals",
-    attendance_taken: "Yes"
-  },
-  {
-    id: "MA201",
-    subject_name: "Advanced Mathematics",
-    attendance_taken: "No"
-  },
-  {
-    id: "EE301",
-    subject_name: "Electrical Engineering Basics",
-    attendance_taken: "Yes"
-  }
-];
-
-const colorPicker = new ColorPicker();
-const dummyClasses = rawClasses.map((cls, idx) => ({
-  ...cls,
-  color: colorPicker.getColor(idx)
-}));
+interface ClassItem {
+  id: string;
+  subject_name: string;
+  attendance_taken: string;
+  color: string;
+}
 
 export default function FacultyDashboard() {
   const router = useRouter();
@@ -40,7 +24,48 @@ export default function FacultyDashboard() {
   const successColor = useThemeColor({}, 'success');
   const dangerColor = useThemeColor({}, 'danger');
 
-  const renderClassItem = ({ item }: { item: typeof dummyClasses[0] }) => (
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const colorPicker = new ColorPicker();
+
+  useEffect(() => {
+    fetchClasses();
+  }, []);
+
+  const fetchClasses = async () => {
+    try {
+      setLoading(true);
+      const apiClasses = await getClasses();
+      
+      // Add colors to the classes
+      const classesWithColors = apiClasses.map((cls, index) => ({
+        ...cls,
+        color: colorPicker.getColor(index)
+      }));
+      
+      setClasses(classesWithColors);
+    } catch (error) {
+      console.error('Failed to fetch classes:', error);
+      Alert.alert(
+        'Error', 
+        'Failed to load classes. Please check your connection and try again.',
+        [
+          { 
+            text: 'Retry', 
+            onPress: fetchClasses 
+          },
+          { 
+            text: 'Cancel', 
+            style: 'cancel' 
+          }
+        ]
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderClassItem = ({ item }: { item: ClassItem }) => (
     <TouchableOpacity 
       style={[styles.classCard, { backgroundColor: item.color }]} 
       onPress={() => router.push({ pathname: '/class-details', params: { classId: item.id } })}
@@ -91,13 +116,26 @@ export default function FacultyDashboard() {
       </View>
 
       {/* Classes List */}
-      <FlatList
-        data={dummyClasses}
-        keyExtractor={item => item.id}
-        renderItem={renderClassItem}
-        contentContainerStyle={styles.classesContainer}
-        showsVerticalScrollIndicator={false}
-      />
+      {loading && classes.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <ThemedText style={styles.loadingText}>Loading classes...</ThemedText>
+        </View>
+      ) : classes.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <ThemedText style={styles.emptyText}>No classes found</ThemedText>
+          <ThemedText style={styles.emptySubtext}>Tap the + button to create your first class</ThemedText>
+        </View>
+      ) : (
+        <FlatList
+          data={classes}
+          keyExtractor={item => item.id}
+          renderItem={renderClassItem}
+          contentContainerStyle={styles.classesContainer}
+          showsVerticalScrollIndicator={false}
+          refreshing={loading}
+          onRefresh={fetchClasses}
+        />
+      )}
 
       {/* Floating Add Button */}
       <TouchableOpacity 
@@ -113,6 +151,27 @@ export default function FacultyDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    opacity: 0.7,
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
