@@ -144,7 +144,6 @@ def generate_qr(
 @app.get("/qr/validate", name="validate_qr")
 def validate_qr(token: str = Query(...)):
     if is_token_active(token):
-        print(True)
         return RedirectResponse(url=REDIRECT_URL, status_code=302)
     raise HTTPException(status_code=410, detail="Token invalid or cancelled")
 
