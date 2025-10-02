@@ -1,11 +1,21 @@
-from fastapi import FastAPI, Depends, HTTPException, Path
+
+from fastapi import Body, FastAPI, Depends, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func, case, select
+
 from sqlalchemy.orm import Session
+import io
+import secrets
+import qrcode
+from qrcode.constants import ERROR_CORRECT_M
+import base64
 import models, schemas
 from typing import List
 from schemas import AttendanceRequest
 from datetime import date
+from typing import Dict
+import threading
 
 app = FastAPI()
 
@@ -20,7 +30,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 def get_db():                   # Dependency to get DB session
     db = models.SessionLocal()
@@ -92,6 +101,7 @@ def get_classes(db: Session = Depends(get_db)):
 
     stmt = (select(models.Class.id, models.Class.subject_name, case( (attendance_counts.c.count_today > 0, "Yes"), else_="No").label("attendance_taken"))
         .outerjoin(attendance_counts, models.Class.id == attendance_counts.c.class_id))
+
 
     classes = db.execute(stmt).mappings().all()
 
@@ -190,3 +200,86 @@ def get_attendance_history(class_id: str, db: Session = Depends(get_db)):
 
     history = [ {"date": record.date, "student_id": record.student_id, "student_name": record.student_name, "status": "P" if record.present else "A"} for record in attendance_records]
     return {"class_code": class_id, "attendance_history": history}
+
+
+_tokens: dict[str, bool] = {}
+_tokens_lock = threading.Lock()
+
+# save_token, is_token_active and invalidate_token, helper functions to interact with the token dictionary in a safe way
+def save_token(token: str) -> None:
+    with _tokens_lock:
+        _tokens[token] = True
+
+def is_token_active(token: str) -> bool:
+    with _tokens_lock:
+        return bool(_tokens.get(token, False))
+
+def invalidate_token(token: str) -> bool:
+    with _tokens_lock:
+        return _tokens.pop(token, None) is not None
+
+
+# Once done with the frontend put the URL that opens once you scan the QR code here
+REDIRECT_URL = "https://google.com"
+
+
+
+# builds the qrcode png image and returns it as bytes
+def make_qr_png_bytes(data: str, box_size: int = 10, border: int = 4, error_correction=ERROR_CORRECT_M) -> bytes:
+    qr = qrcode.QRCode(version=None, error_correction=error_correction, box_size=box_size, border=border)
+    qr.add_data(data)
+    qr.make(fit=True)
+
+    qr_img = qr.make_image(fill_color="black", back_color="white")      # Pillow image
+    buffer = io.BytesIO()
+    qr_img.save(buffer, format="PNG") # type: ignore
+    buffer.seek(0)
+    return buffer.getvalue()        # returns a png image in bytes  
+
+
+# 1) generated a qr code encodes /qr/validate?token=RANDOM_TOKEN; 
+# 2) tokens generated randomly, stored in valid_tokens dict
+# 3) on scanning redirects to above url
+# 4) functin returns QR png as bytes + token, save token in frontend to invalidate later
+# 5) base64 is one of the two modes of returning we chose; it return Json of token + data (qr code image that can be rendered using image tag)
+@app.get("/qr/generate")
+def generate_qr(
+    request : Request,
+    length: int = Query(16, ge=1, le=256),
+    box_size: int = Query(10, ge=1, le=40),
+    border: int = Query(4, ge=0, le=20),
+    as_base64: bool = Query(True),
+):
+    token = secrets.token_hex(length)
+    save_token(token)
+
+    # build absolute validation URL based on incoming request
+    validation_url = str(request.url_for("validate_qr")) + f"?token={token}"
+    # we build the QR code to automatically call the validate endpoint
+    png_bytes = make_qr_png_bytes(data=validation_url, box_size=box_size, border=border)
+
+    if as_base64:
+        b64 = base64.b64encode(png_bytes).decode("ascii")
+        return JSONResponse({"token": token, "data": f"data:image/png;base64,{b64}", "validation_url": validation_url})
+    
+    return StreamingResponse(io.BytesIO(png_bytes), media_type="image/png", headers={"X-QR-Token": token, "X-Validation-URL": validation_url})
+
+
+
+# 1) to VERIFY that token specified as a query parameter is valid (dictionary lookup), if so, redirect to desired URL(REDIRECT_URL) else raise error
+@app.get("/qr/validate", name="validate_qr")
+def validate_qr(token: str = Query(...)):
+    if is_token_active(token):
+        return RedirectResponse(url=REDIRECT_URL, status_code=302)
+    raise HTTPException(status_code=410, detail="Token invalid or cancelled")
+
+# when the CANCEL button is clicked; it invalidates the current token associated with QR, specifies that token saved earlier in dict, commits to database (needs to be implemented, ideally extend this function)
+@app.post("/qr/cancel")
+def cancel_qr(payload: dict = Body(...)):
+    token = payload.get("token")
+    if not token:
+        raise HTTPException(status_code=400, detail="token required")
+    if invalidate_token(token):
+        return {"token": token, "cancelled": True}
+    raise HTTPException(status_code=404, detail="Token not found")
+
