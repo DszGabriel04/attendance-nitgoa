@@ -25,7 +25,8 @@ app.add_middleware(
     allow_origins=[
         "https://attendance-nitgoa.vercel.app",
         "https://attendance-nitgoa-jkm71scqp-russells-projects-bb2412f0.vercel.app",
-    ],  
+        "http://localhost:8081",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,7 +43,7 @@ def faculty_login(email: str, password: str, db: Session = Depends(get_db)):
     faculty = db.query(models.Faculty).filter(models.Faculty.email == email).first()
     if not faculty:                        raise HTTPException(status_code=404, detail="Invalid email")
     if password != faculty.password_hash:  raise HTTPException(status_code=401, detail="Invalid password")      # plain password for now
-    return {"message": "Login successful"}
+    return {"message": "Login successful", "faculty_id": faculty.id} # need this
 
 
 @app.post("/classes")
