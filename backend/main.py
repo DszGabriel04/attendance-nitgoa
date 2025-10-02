@@ -86,9 +86,17 @@ def get_classes(db: Session = Depends(get_db)):
     return [ {"id": cls[0], "subject_name": cls[1], "attendance_taken": cls[2]} for cls in classes]     # returns [] if no class found
 
 
+
+
+
+
+
+
+
 _tokens: dict[str, bool] = {}
 _tokens_lock = threading.Lock()
 
+# save_token, is_token_active and invalidate_token, helper functions to interact with the token dictionary in a safe way
 def save_token(token: str) -> None:
     with _tokens_lock:
         _tokens[token] = True
@@ -106,6 +114,8 @@ def invalidate_token(token: str) -> bool:
 REDIRECT_URL = "https://google.com"
 
 
+
+# builds the qrcode png image and returns it as bytes
 def make_qr_png_bytes(data: str, box_size: int = 10, border: int = 4, error_correction=ERROR_CORRECT_M) -> bytes:
     qr = qrcode.QRCode(version=None, error_correction=error_correction, box_size=box_size, border=border)
     qr.add_data(data)
@@ -118,6 +128,11 @@ def make_qr_png_bytes(data: str, box_size: int = 10, border: int = 4, error_corr
     return buffer.getvalue()        # returns a png image in bytes  
 
 
+# 1) generated a qr code encodes /qr/validate?token=RANDOM_TOKEN; 
+# 2) tokens generated randomly, stored in valid_tokens dict
+# 3) on scanning redirects to above url
+# 4) functin returns QR png as bytes + token, save token in frontend to invalidate later
+# 5) base64 is one of the two modes of returning we chose; it return Json of token + data (qr code image that can be rendered using image tag)
 @app.get("/qr/generate")
 def generate_qr(
     request : Request,
@@ -141,13 +156,15 @@ def generate_qr(
     return StreamingResponse(io.BytesIO(png_bytes), media_type="image/png", headers={"X-QR-Token": token, "X-Validation-URL": validation_url})
 
 
+
+# 1) to VERIFY that token specified as a query parameter is valid (dictionary lookup), if so, redirect to desired URL(REDIRECT_URL) else raise error
 @app.get("/qr/validate", name="validate_qr")
 def validate_qr(token: str = Query(...)):
     if is_token_active(token):
         return RedirectResponse(url=REDIRECT_URL, status_code=302)
     raise HTTPException(status_code=410, detail="Token invalid or cancelled")
 
-
+# when the CANCEL button is clicked; it invalidates the current token associated with QR, specifies that token saved earlier in dict, commits to database (needs to be implemented, ideally extend this function)
 @app.post("/qr/cancel")
 def cancel_qr(payload: dict = Body(...)):
     token = payload.get("token")
