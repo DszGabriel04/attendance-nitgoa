@@ -259,6 +259,19 @@ export default function AttendanceUI() {
             </View>
           </View>
 
+          {/* QR Code Button */}
+          <View style={styles.qrSection}>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/qr-attendance', params: { classId } })}
+              style={[styles.qrButton, { backgroundColor: cardBackground }]}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="qr-code-outline" size={24} color={primaryColor} />
+              <ThemedText style={styles.qrButtonText}>Generate QR Code for Attendance</ThemedText>
+              <Ionicons name="chevron-forward" size={20} color={useThemeColor({}, 'icon')} />
+            </TouchableOpacity>
+          </View>
+
           {/* Stats */}
           <View style={styles.statsContainer}>
             <View style={[styles.statCard, { backgroundColor: cardBackground }]}>
@@ -538,5 +551,26 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  qrSection: {
+    paddingHorizontal: 16,
+    marginVertical: 8,
+  },
+  qrButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+    gap: 12,
+  },
+  qrButtonText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

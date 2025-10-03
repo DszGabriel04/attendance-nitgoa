@@ -1,6 +1,6 @@
 // API configuration
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:10000";
 
 
 // API response types
@@ -462,6 +462,196 @@ export async function parseCSV(file: File): Promise<{ success: boolean; data?: S
     return { 
       success: false, 
       error: 'Failed to parse CSV file. Please ensure it\'s a valid CSV format.' 
+    };
+  }
+}
+
+// QR Code API types
+interface QRCodeResponse {
+  token: string;
+  data: string; // base64 encoded image data
+  validation_url: string;
+}
+
+// Generate QR Code for attendance
+export async function generateQRCode(classId: string, length: number = 16, boxSize: number = 10, border: number = 4): Promise<{ success: boolean; data?: QRCodeResponse; error?: string }> {
+  try {
+    const url = new URL(`${API_BASE_URL}/qr/generate`);
+    url.searchParams.append('class_id', classId);
+    url.searchParams.append('length', length.toString());
+    url.searchParams.append('box_size', boxSize.toString());
+    url.searchParams.append('border', border.toString());
+    url.searchParams.append('as_base64', 'true');
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { 
+        success: false, 
+        error: errorData.detail || 'Failed to generate QR code' 
+      };
+    }
+
+    const data: QRCodeResponse = await response.json();
+    return { 
+      success: true, 
+      data 
+    };
+  } catch (error) {
+    console.error('QR code generation error:', error);
+    return { 
+      success: false, 
+      error: 'Failed to generate QR code. Please check your connection.' 
+    };
+  }
+}
+
+// Get class information for QR token
+export async function getQRClassInfo(token: string): Promise<{ success: boolean; data?: { id: string; subject_name: string; faculty_name: string; date: string }; error?: string }> {
+  try {
+    const url = new URL(`${API_BASE_URL}/qr/class-info`);
+    url.searchParams.append('token', token);
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { 
+        success: false, 
+        error: errorData.detail || 'Failed to get class information' 
+      };
+    }
+
+    const data = await response.json();
+    return { 
+      success: true, 
+      data 
+    };
+  } catch (error) {
+    console.error('QR class info error:', error);
+    return { 
+      success: false, 
+      error: 'Failed to get class information. Please check your connection.' 
+    };
+  }
+}
+
+// Get QR code status (number of students who have scanned)
+export async function getQRCodeStatus(token: string): Promise<{ success: boolean; data?: { submitted_count: number; submitted_students: string[] }; error?: string }> {
+  try {
+    const url = new URL(`${API_BASE_URL}/qr/status`);
+    url.searchParams.append('token', token);
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { 
+        success: false, 
+        error: errorData.detail || 'Failed to get QR code status' 
+      };
+    }
+
+    const data = await response.json();
+    return { 
+      success: true, 
+      data 
+    };
+  } catch (error) {
+    console.error('QR code status error:', error);
+    return { 
+      success: false, 
+      error: 'Failed to get QR code status. Please check your connection.' 
+    };
+  }
+}
+
+// Submit attendance via QR code
+export async function submitQRAttendance(token: string, studentId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/qr/submit-attendance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token: token,
+        student_id: studentId
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { 
+        success: false, 
+        error: errorData.detail || 'Failed to submit attendance' 
+      };
+    }
+
+    const data = await response.json();
+    return { 
+      success: true, 
+      data 
+    };
+  } catch (error) {
+    console.error('Submit attendance error:', error);
+    return { 
+      success: false, 
+      error: 'Failed to submit attendance. Please check your connection.' 
+    };
+  }
+}
+
+// Cancel QR Code
+export async function cancelQRCode(token: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    console.log('Making cancel request to:', `${API_BASE_URL}/qr/cancel`);
+    console.log('With token:', token);
+    
+    const response = await fetch(`${API_BASE_URL}/qr/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token }),
+    });
+
+    console.log('Cancel response status:', response.status);
+    console.log('Cancel response ok:', response.ok);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.log('Cancel error data:', errorData);
+      return { 
+        success: false, 
+        error: errorData.detail || 'Failed to cancel QR code' 
+      };
+    }
+
+    const responseData = await response.json();
+    console.log('Cancel success data:', responseData);
+    return { success: true, data: responseData };
+  } catch (error) {
+    console.error('QR code cancellation error:', error);
+    return { 
+      success: false, 
+      error: 'Failed to cancel QR code. Please check your connection.' 
     };
   }
 }

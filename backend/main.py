@@ -1,7 +1,7 @@
 
 from fastapi import Body, FastAPI, Depends, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse, HTMLResponse, HTMLResponse
 from sqlalchemy import func, case, select
 
 from sqlalchemy.orm import Session
@@ -11,10 +11,9 @@ import qrcode
 from qrcode.constants import ERROR_CORRECT_M
 import base64
 import models, schemas
-from typing import List
+from typing import List, Dict, Set
 from schemas import AttendanceRequest
 from datetime import date
-from typing import Dict
 import threading
 
 app = FastAPI()
@@ -204,12 +203,17 @@ def get_attendance_history(class_id: str, db: Session = Depends(get_db)):
 
 
 _tokens: dict[str, bool] = {}
+_token_submissions: dict[str, Set[str]] = {}  # token -> set of student roll numbers
+_token_class_mapping: dict[str, str] = {}  # token -> class_id
 _tokens_lock = threading.Lock()
 
 # save_token, is_token_active and invalidate_token, helper functions to interact with the token dictionary in a safe way
-def save_token(token: str) -> None:
+def save_token(token: str, class_id: str = None) -> None:
     with _tokens_lock:
         _tokens[token] = True
+        _token_submissions[token] = set()
+        if class_id:
+            _token_class_mapping[token] = class_id
 
 def is_token_active(token: str) -> bool:
     with _tokens_lock:
@@ -217,7 +221,26 @@ def is_token_active(token: str) -> bool:
 
 def invalidate_token(token: str) -> bool:
     with _tokens_lock:
-        return _tokens.pop(token, None) is not None
+        removed = _tokens.pop(token, None) is not None
+        if removed:
+            _token_submissions.pop(token, None)
+            _token_class_mapping.pop(token, None)
+        return removed
+
+def add_student_to_token(token: str, student_id: str) -> bool:
+    with _tokens_lock:
+        if token in _token_submissions:
+            _token_submissions[token].add(student_id)
+            return True
+        return False
+
+def get_token_submissions(token: str) -> Set[str]:
+    with _tokens_lock:
+        return _token_submissions.get(token, set()).copy()
+
+def get_token_class_id(token: str) -> str:
+    with _tokens_lock:
+        return _token_class_mapping.get(token, None)
 
 
 # Once done with the frontend put the URL that opens once you scan the QR code here
@@ -246,13 +269,20 @@ def make_qr_png_bytes(data: str, box_size: int = 10, border: int = 4, error_corr
 @app.get("/qr/generate")
 def generate_qr(
     request : Request,
+    class_id: str = Query(..., description="Class ID for attendance"),
     length: int = Query(16, ge=1, le=256),
     box_size: int = Query(10, ge=1, le=40),
     border: int = Query(4, ge=0, le=20),
     as_base64: bool = Query(True),
+    db: Session = Depends(get_db),
 ):
+    # Verify class exists
+    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail=f"Class '{class_id}' not found")
+    
     token = secrets.token_hex(length)
-    save_token(token)
+    save_token(token, class_id)
 
     # build absolute validation URL based on incoming request
     validation_url = str(request.url_for("validate_qr")) + f"?token={token}"
@@ -267,20 +297,164 @@ def generate_qr(
 
 
 
-# 1) to VERIFY that token specified as a query parameter is valid (dictionary lookup), if so, redirect to desired URL(REDIRECT_URL) else raise error
+# 1) to VERIFY that token specified as a query parameter is valid (dictionary lookup), direct redirect to app
 @app.get("/qr/validate", name="validate_qr")
-def validate_qr(token: str = Query(...)):
-    if is_token_active(token):
-        return RedirectResponse(url=REDIRECT_URL, status_code=302)
-    raise HTTPException(status_code=410, detail="Token invalid or cancelled")
+def validate_qr(request: Request, token: str = Query(...)):
+    if not is_token_active(token):
+        raise HTTPException(status_code=410, detail="Token invalid or cancelled")
+    
+    # Get user agent to determine the best redirect approach
+    user_agent = request.headers.get("user-agent", "").lower()
+    
+    # For development/testing, try Expo deep link format
+    if "expo" in user_agent or "localhost" in str(request.base_url):
+        # Expo development deep link
+        expo_url = f"exp://192.168.1.100:8081/--/qr-student?token={token}"
+        return RedirectResponse(url=expo_url, status_code=302)
+    
+    # For mobile browsers, try the custom app scheme
+    if any(mobile in user_agent for mobile in ["android", "iphone", "mobile"]):
+        app_url = f"nitgoa-attendance://qr-student?token={token}"
+        return RedirectResponse(url=app_url, status_code=302)
+    
+    # For desktop browsers or when deep link fails, redirect to the web app
+    # This prevents the "address wasn't understood" error
+    frontend_url = f"http://localhost:8081/qr-student?token={token}"
+    return RedirectResponse(url=frontend_url, status_code=302)
 
-# when the CANCEL button is clicked; it invalidates the current token associated with QR, specifies that token saved earlier in dict, commits to database (needs to be implemented, ideally extend this function)
+
+
+# Get QR code status (number of students submitted)
+@app.get("/qr/status")
+def get_qr_status(token: str = Query(...)):
+    if not is_token_active(token):
+        raise HTTPException(status_code=410, detail="Token invalid or cancelled")
+    
+    submitted_students = get_token_submissions(token)
+    return {
+        "submitted_count": len(submitted_students),
+        "submitted_students": list(submitted_students)
+    }
+
+# Get class information for a token
+@app.get("/qr/class-info")
+def get_class_info(token: str = Query(...), db: Session = Depends(get_db)):
+    if not is_token_active(token):
+        raise HTTPException(status_code=410, detail="Token invalid or cancelled")
+    
+    class_id = get_token_class_id(token)
+    if not class_id:
+        raise HTTPException(status_code=400, detail="Invalid token configuration")
+    
+    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+    
+    # Get faculty information
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == class_obj.faculty_id).first()
+    faculty_name = faculty.first_name if faculty else "Unknown"
+    
+    return {
+        "id": class_obj.id,
+        "subject_name": class_obj.subject_name,
+        "faculty_name": faculty_name,
+        "date": date.today().strftime('%B %d, %Y')
+    }
+
+# Submit attendance via QR code
+@app.post("/qr/submit-attendance")
+def submit_attendance(payload: dict = Body(...), db: Session = Depends(get_db)):
+    token = payload.get("token")
+    student_id = payload.get("student_id")
+    
+    if not token or not student_id:
+        raise HTTPException(status_code=400, detail="Token and student_id required")
+    
+    if not is_token_active(token):
+        raise HTTPException(status_code=410, detail="Token invalid or cancelled")
+    
+    # Get class information
+    class_id = get_token_class_id(token)
+    if not class_id:
+        raise HTTPException(status_code=400, detail="Invalid token configuration")
+    
+    # Check if student exists and is enrolled in this class
+    # For now, we'll check if student exists in the students table
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if not student:
+        # Check if student has any attendance record for this class (indicating enrollment)
+        has_record = db.query(models.Attendance).filter(
+            models.Attendance.student_id == student_id,
+            models.Attendance.class_id == class_id
+        ).first()
+        
+        if not has_record:
+            raise HTTPException(status_code=404, detail="Student not enrolled in this class")
+    
+    # Add student to token submissions
+    if add_student_to_token(token, student_id):
+        return {"message": "Attendance submission recorded", "student_id": student_id}
+    else:
+        raise HTTPException(status_code=400, detail="Failed to record attendance")
+
+# when the CANCEL button is clicked; it invalidates the current token associated with QR, 
+# specifies that token saved earlier in dict, and commits attendance to database
 @app.post("/qr/cancel")
-def cancel_qr(payload: dict = Body(...)):
+def cancel_qr(payload: dict = Body(...), db: Session = Depends(get_db)):
     token = payload.get("token")
     if not token:
         raise HTTPException(status_code=400, detail="token required")
-    if invalidate_token(token):
-        return {"token": token, "cancelled": True}
-    raise HTTPException(status_code=404, detail="Token not found")
+    
+    if not is_token_active(token):
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    # Get submitted students and class info
+    submitted_students = get_token_submissions(token)
+    class_id = get_token_class_id(token)
+    
+    attendance_date = date.today()
+    marked_present = 0
+    errors = []
+    
+    if class_id and submitted_students:
+        # Mark all submitted students as present
+        for student_id in submitted_students:
+            try:
+                # Check if attendance record already exists
+                existing = db.query(models.Attendance).filter(
+                    models.Attendance.class_id == class_id,
+                    models.Attendance.student_id == student_id,
+                    models.Attendance.date == attendance_date
+                ).first()
+                
+                if existing:
+                    # Update existing record to present
+                    existing.present = True
+                    marked_present += 1
+                else:
+                    # Create new attendance record
+                    new_attendance = models.Attendance(
+                        class_id=class_id,
+                        student_id=student_id,
+                        date=attendance_date,
+                        present=True
+                    )
+                    db.add(new_attendance)
+                    marked_present += 1
+                    
+            except Exception as e:
+                errors.append(f"Failed to mark {student_id}: {str(e)}")
+        
+        db.commit()
+    
+    # Invalidate token
+    invalidate_token(token)
+    
+    return {
+        "token": token, 
+        "cancelled": True,
+        "students_marked_present": marked_present,
+        "submitted_students": list(submitted_students),
+        "errors": errors
+    }
 

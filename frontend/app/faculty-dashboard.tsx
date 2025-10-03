@@ -84,7 +84,7 @@ export default function FacultyDashboard() {
   const renderClassItem = ({ item }: { item: ClassItem }) => (
     <TouchableOpacity 
       style={[styles.classCard, { backgroundColor: item.color }]} 
-      onPress={() => router.push({ pathname: '/class-details', params: { classId: item.id } })}
+      onPress={() => router.push({ pathname: '/add-attendance', params: { classId: item.id } })}
     >
       <View style={styles.cardContent}>
         <View style={styles.cardHeader}>
