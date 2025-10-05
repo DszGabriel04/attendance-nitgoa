@@ -487,4 +487,3 @@ def cancel_qr(payload: dict = Body(...), db: Session = Depends(get_db)):
         "submitted_students": list(submitted_students),
         "errors": errors
     }
-
