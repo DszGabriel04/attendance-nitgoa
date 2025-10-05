@@ -1,4 +1,4 @@
-// class-details.tsx
+// class-details.tsx (Not in use anymore)
 import React, { useState, useEffect } from 'react';
 import {
   View,

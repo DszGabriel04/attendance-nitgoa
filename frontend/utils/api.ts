@@ -554,10 +554,26 @@ export async function generateQRCode(classId: string, length: number = 16, boxSi
 }
 
 // Get QR code status (number of students who have scanned)
-export async function getQRCodeStatus(token: string): Promise<{ success: boolean; data?: { submitted_count: number; submitted_students: string[] }; error?: string }> {
+export async function getQRCodeStatus(token: string, includeDetails: boolean = false): Promise<{ 
+  success: boolean; 
+  data?: { 
+    submitted_count: number; 
+    submitted_students: string[];
+    recent_submissions?: number;
+    recent_students?: string[];
+    class_id?: string;
+    token_active?: boolean;
+    ready_for_bulk_update?: boolean;
+    last_updated?: string;
+  }; 
+  error?: string 
+}> {
   try {
     const url = new URL(`${API_BASE_URL}/qr/status`);
     url.searchParams.append('token', token);
+    if (includeDetails) {
+      url.searchParams.append('include_details', 'true');
+    }
 
     const response = await fetch(url.toString(), {
       method: 'GET',

@@ -9,6 +9,7 @@ import {
   StatusBar,
   Image,
   Dimensions,
+  ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +33,10 @@ export default function QRAttendance() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [submittedStudents, setSubmittedStudents] = useState<string[]>([]);
+  const [recentSubmissions, setRecentSubmissions] = useState(0);
+  const [recentStudents, setRecentStudents] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
   
   // Theme colors
   const backgroundColor = useThemeColor({}, 'background');
@@ -47,19 +51,27 @@ export default function QRAttendance() {
     }
   }, [classId]);
 
-  // Poll for status updates with smart polling
+  // Poll for status updates with smart polling and bulk operation optimization
   useEffect(() => {
     let interval: any;
     let isActive = true;
+    let pollCount = 0;
     
-    const pollStatus = async () => {
+    const pollStatus = async (useDetailedStatus = false) => {
       if (!isActive || !qrData?.token) return;
       
       try {
-        const statusResult = await getQRCodeStatus(qrData.token);
+        const statusResult = await getQRCodeStatus(qrData.token, useDetailedStatus);
         if (statusResult.success && statusResult.data) {
           setSubmittedCount(statusResult.data.submitted_count);
           setSubmittedStudents(statusResult.data.submitted_students);
+          setLastUpdateTime(new Date());
+          
+          // Update additional bulk operation data if available
+          if (statusResult.data.recent_submissions !== undefined) {
+            setRecentSubmissions(statusResult.data.recent_submissions);
+            setRecentStudents(statusResult.data.recent_students || []);
+          }
         }
       } catch (error) {
         console.error('Failed to get status:', error);
@@ -69,13 +81,17 @@ export default function QRAttendance() {
     };
     
     if (qrData?.token) {
-      // Initial poll
-      pollStatus();
+      // Initial poll with detailed data
+      pollStatus(true);
       
-      // Set up interval polling
+      // Set up adaptive interval polling
       interval = setInterval(() => {
-        pollStatus();
-      }, 8000); // Poll every 8 seconds
+        pollCount++;
+        // Use detailed status every 3rd poll (to reduce API load)
+        // but still get real-time updates for submission count
+        const useDetails = pollCount % 3 === 0;
+        pollStatus(useDetails);
+      }, 6000); // Poll every 6 seconds for better responsiveness
     }
 
     return () => {
@@ -91,10 +107,17 @@ export default function QRAttendance() {
     
     setIsRefreshing(true);
     try {
-      const statusResult = await getQRCodeStatus(qrData.token);
+      const statusResult = await getQRCodeStatus(qrData.token, true); // Always use detailed status on manual refresh
       if (statusResult.success && statusResult.data) {
         setSubmittedCount(statusResult.data.submitted_count);
         setSubmittedStudents(statusResult.data.submitted_students);
+        setLastUpdateTime(new Date());
+        
+        // Update bulk operation data
+        if (statusResult.data.recent_submissions !== undefined) {
+          setRecentSubmissions(statusResult.data.recent_submissions);
+          setRecentStudents(statusResult.data.recent_students || []);
+        }
       }
     } catch (error) {
       console.error('Failed to refresh status:', error);
@@ -128,20 +151,23 @@ export default function QRAttendance() {
   };
 
   const handleCancel = async () => {
-    console.log('Cancel button pressed');
+    console.log('Bulk finalize button pressed');
     if (!qrData?.token) {
       console.log('No token available, going back...');
       router.back();
       return;
     }
 
-    console.log(`Submitted count: ${submittedCount}`);
+    console.log(`Bulk operation: ${submittedCount} total submissions`);
+    if (recentSubmissions > 0) {
+      console.log(`Recent activity: ${recentSubmissions} submissions in last 30 seconds`);
+    }
     
-    // Skip alerts and directly perform cancel
+    // Skip alerts and directly perform bulk cancel/finalize
     if (submittedCount === 0) {
       console.log('No submissions - cancelling QR code...');
     } else {
-      console.log(`${submittedCount} student(s) have scanned - finalizing attendance...`);
+      console.log(`Bulk finalizing attendance for ${submittedCount} student(s): ${submittedStudents.join(', ')}`);
     }
     
     await performCancel();
@@ -150,29 +176,30 @@ export default function QRAttendance() {
   const performCancel = async () => {
     if (!qrData?.token) return;
 
-    console.log('Cancelling QR code with token:', qrData.token);
+    console.log('Performing bulk attendance update with token:', qrData.token);
+    console.log('Students to be processed in bulk:', submittedStudents);
     try {
       const result = await cancelQRCode(qrData.token);
-      console.log('Cancel result:', result);
+      console.log('Bulk update result:', result);
       
       if (result.success && result.data) {
         const { students_marked_present, submitted_students, errors } = result.data;
         
-        console.log(`Successfully marked ${students_marked_present} student(s) as present`);
+        console.log(`Bulk operation completed: ${students_marked_present} student(s) marked present in single transaction`);
         if (submitted_students && submitted_students.length > 0) {
-          console.log('Students marked present:', submitted_students.join(', '));
+          console.log('Bulk processed students:', submitted_students.join(', '));
         }
         if (errors && errors.length > 0) {
-          console.log('Errors:', errors.join(', '));
+          console.log('Bulk operation errors:', errors.join(', '));
         }
       } else {
-        console.log('Cancel failed:', result.error);
+        console.log('Bulk update failed:', result.error);
       }
     } catch (error) {
-      console.log('Cancel error:', error);
+      console.log('Bulk update error:', error);
     }
     
-    // Always navigate back after cancelling, regardless of success/failure
+    // Always navigate back after bulk operation, regardless of success/failure
     console.log('Navigating back to add-attendance page...');
     router.back();
   };
@@ -214,7 +241,12 @@ export default function QRAttendance() {
           <ThemedText style={styles.loadingText}>Generating QR Code...</ThemedText>
         </View>
       ) : qrData ? (
-        <View style={styles.content}>
+        <ScrollView 
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={true}
+          bounces={true}
+        >
           {/* Instructions */}
           <View style={[styles.instructionsCard, { backgroundColor: cardBackground }]}>
             <Ionicons name="information-circle-outline" size={20} color={primaryColor} />
@@ -239,24 +271,38 @@ export default function QRAttendance() {
               </TouchableOpacity>
             </View>
             <View style={styles.statusContent}>
-              <ThemedText style={[styles.countText, { color: primaryColor }]}>
-                {submittedCount}
-              </ThemedText>
-              <ThemedText style={styles.countLabel}>
-                {submittedCount === 1 ? 'student has' : 'students have'} scanned
-              </ThemedText>
+              <View style={styles.mainStats}>
+                <ThemedText style={[styles.countText, { color: primaryColor }]}>
+                  {submittedCount}
+                </ThemedText>
+                <ThemedText style={styles.countLabel}>
+                  {submittedCount === 1 ? 'student has' : 'students have'} scanned
+                </ThemedText>
+              </View>
+              
             </View>
+            
+            {/* Bulk operation ready indicator */}
+            {submittedCount > 0 && (
+              <View style={[styles.bulkIndicator, { backgroundColor: '#e8f5e8' }]}>
+                <Ionicons name="checkmark-circle" size={16} color="#2e7d32" />
+                <ThemedText style={[styles.bulkText, { color: '#2e7d32' }]}>
+                  Ready for bulk attendance update
+                </ThemedText>
+              </View>
+            )}
+            
             {submittedStudents.length > 0 && (
               <View style={styles.studentsList}>
-                <ThemedText style={styles.studentsLabel}>Recent scans:</ThemedText>
-                {submittedStudents.slice(-3).map((studentId, index) => (
+                <ThemedText style={styles.studentsLabel}>All submissions:</ThemedText>
+                {submittedStudents.slice(-5).map((studentId, index) => (
                   <ThemedText key={index} style={styles.studentId}>
                     • {studentId}
                   </ThemedText>
                 ))}
-                {submittedStudents.length > 3 && (
+                {submittedStudents.length > 5 && (
                   <ThemedText style={styles.moreStudents}>
-                    +{submittedStudents.length - 3} more...
+                    +{submittedStudents.length - 5} more...
                   </ThemedText>
                 )}
               </View>
@@ -280,17 +326,11 @@ export default function QRAttendance() {
             >
               <Ionicons name="checkmark-circle" size={20} color="#fff" />
               <ThemedText style={styles.actionButtonText}>
-                {submittedCount > 0 ? `Finalize (${submittedCount})` : 'Cancel QR Code'}
+                {submittedCount > 0 ? `Bulk Update (${submittedCount} students)` : 'Cancel QR Code'}
               </ThemedText>
             </TouchableOpacity>
           </View>
-
-          {/* Token Info (for debugging - can be removed in production) */}
-          <View style={[styles.tokenInfo, { backgroundColor: cardBackground }]}>
-            <ThemedText style={styles.tokenLabel}>Token:</ThemedText>
-            <ThemedText style={styles.tokenText}>{qrData.token}</ThemedText>
-          </View>
-        </View>
+        </ScrollView>
       ) : (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={dangerColor} />
@@ -357,10 +397,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     opacity: 0.7,
   },
-  content: {
+  scrollContainer: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     padding: 20,
     gap: 20,
+    paddingBottom: 40, // Extra padding at bottom for scroll
   },
   instructionsCard: {
     flexDirection: 'row',
@@ -513,5 +557,36 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     opacity: 0.6,
     marginTop: 4,
+  },
+  mainStats: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  recentActivity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  recentText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  bulkIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  bulkText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

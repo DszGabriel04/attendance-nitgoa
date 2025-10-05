@@ -15,6 +15,7 @@ from typing import List, Dict, Set
 from schemas import AttendanceRequest
 from datetime import date
 import threading
+import time
 from html_templates import ATTENDANCE_FORM_HTML, TOKEN_EXPIRED_HTML
 
 app = FastAPI()
@@ -206,6 +207,7 @@ def get_attendance_history(class_id: str, db: Session = Depends(get_db)):
 _tokens: dict[str, bool] = {}
 _token_submissions: dict[str, Set[str]] = {}  # token -> set of student roll numbers
 _token_class_mapping: dict[str, str] = {}  # token -> class_id
+_token_timestamps: dict[str, dict[str, float]] = {}  # token -> {student_id: timestamp}
 _tokens_lock = threading.Lock()
 
 # save_token, is_token_active and invalidate_token, helper functions to interact with the token dictionary in a safe way
@@ -213,6 +215,7 @@ def save_token(token: str, class_id: str = None) -> None:
     with _tokens_lock:
         _tokens[token] = True
         _token_submissions[token] = set()
+        _token_timestamps[token] = {}  # Initialize timestamp tracking
         if class_id:
             _token_class_mapping[token] = class_id
 
@@ -226,12 +229,14 @@ def invalidate_token(token: str) -> bool:
         if removed:
             _token_submissions.pop(token, None)
             _token_class_mapping.pop(token, None)
+            _token_timestamps.pop(token, None)  # Clean up timestamp tracking
         return removed
 
 def add_student_to_token(token: str, student_id: str) -> bool:
     with _tokens_lock:
         if token in _token_submissions:
             _token_submissions[token].add(student_id)
+            _token_timestamps[token][student_id] = time.time()  # Track submission time
             return True
         return False
 
@@ -242,6 +247,30 @@ def get_token_submissions(token: str) -> Set[str]:
 def get_token_class_id(token: str) -> str:
     with _tokens_lock:
         return _token_class_mapping.get(token, None)
+
+def get_token_submission_stats(token: str) -> dict:
+    """Get detailed submission statistics for bulk operations"""
+    with _tokens_lock:
+        if token not in _token_submissions:
+            return {}
+        
+        submissions = _token_submissions[token]
+        timestamps = _token_timestamps.get(token, {})
+        current_time = time.time()
+        
+        # Calculate recent submissions (last 30 seconds)
+        recent_submissions = [
+            student_id for student_id in submissions 
+            if current_time - timestamps.get(student_id, 0) <= 30
+        ]
+        
+        return {
+            "total_submissions": len(submissions),
+            "recent_submissions": len(recent_submissions),
+            "recent_students": recent_submissions,
+            "all_students": list(submissions),
+            "ready_for_bulk": len(submissions) > 0
+        }
 
 
 # Once done with the frontend put the URL that opens once you scan the QR code here
@@ -324,17 +353,38 @@ def validate_qr(token: str = Query(...), db: Session = Depends(get_db)):
     
     return HTMLResponse(content=html_content)
 
-# Get QR code status (number of students submitted)
+# Get QR code status (number of students submitted) - optimized for bulk operations
 @app.get("/qr/status")
-def get_qr_status(token: str = Query(...)):
+def get_qr_status(token: str = Query(...), include_details: bool = Query(False)):
     if not is_token_active(token):
         raise HTTPException(status_code=410, detail="Token invalid or cancelled")
     
-    submitted_students = get_token_submissions(token)
-    return {
-        "submitted_count": len(submitted_students),
-        "submitted_students": list(submitted_students)
-    }
+    class_id = get_token_class_id(token)
+    
+    if include_details:
+        # Use detailed stats for bulk operations
+        stats = get_token_submission_stats(token)
+        response_data = {
+            "submitted_count": stats.get("total_submissions", 0),
+            "submitted_students": stats.get("all_students", []),
+            "recent_submissions": stats.get("recent_submissions", 0),
+            "recent_students": stats.get("recent_students", []),
+            "class_id": class_id,
+            "token_active": True,
+            "ready_for_bulk_update": stats.get("ready_for_bulk", False),
+            "last_updated": date.today().isoformat()
+        }
+    else:
+        # Simple response for basic polling
+        submitted_students = get_token_submissions(token)
+        response_data = {
+            "submitted_count": len(submitted_students),
+            "submitted_students": list(submitted_students),
+            "class_id": class_id,
+            "token_active": True
+        }
+    
+    return response_data
 
 # Submit attendance via QR code
 @app.post("/qr/submit-attendance")
@@ -392,35 +442,55 @@ def cancel_qr(payload: dict = Body(...), db: Session = Depends(get_db)):
     errors = []
     
     if class_id and submitted_students:
-        # Mark all submitted students as present
-        for student_id in submitted_students:
-            try:
-                # Check if attendance record already exists
-                existing = db.query(models.Attendance).filter(
-                    models.Attendance.class_id == class_id,
-                    models.Attendance.student_id == student_id,
-                    models.Attendance.date == attendance_date
-                ).first()
-                
-                if existing:
-                    # Update existing record to present
-                    existing.present = True
-                    marked_present += 1
+        # Bulk update approach - prepare all operations first, then execute
+        try:
+            # Get all existing attendance records for this class and date in a single query
+            existing_records = db.query(models.Attendance).filter(
+                models.Attendance.class_id == class_id,
+                models.Attendance.date == attendance_date,
+                models.Attendance.student_id.in_(submitted_students)
+            ).all()
+            
+            # Create a map of existing records for quick lookup
+            existing_map = {record.student_id: record for record in existing_records}
+            
+            # Process all submitted students
+            records_to_update = []
+            records_to_create = []
+            
+            for student_id in submitted_students:
+                if student_id in existing_map:
+                    # Update existing record
+                    existing_record = existing_map[student_id]
+                    if not existing_record.present:  # Only update if not already present
+                        existing_record.present = True
+                        records_to_update.append(student_id)
+                        marked_present += 1
                 else:
-                    # Create new attendance record
-                    new_attendance = models.Attendance(
+                    # Create new record
+                    new_record = models.Attendance(
                         class_id=class_id,
                         student_id=student_id,
                         date=attendance_date,
                         present=True
                     )
-                    db.add(new_attendance)
+                    db.add(new_record)
+                    records_to_create.append(student_id)
                     marked_present += 1
-                    
-            except Exception as e:
-                errors.append(f"Failed to mark {student_id}: {str(e)}")
-        
-        db.commit()
+            
+            # Commit all changes in a single transaction
+            db.commit()
+            
+            # Log the bulk operation for debugging
+            if records_to_update:
+                print(f"Bulk updated {len(records_to_update)} existing records: {records_to_update}")
+            if records_to_create:
+                print(f"Bulk created {len(records_to_create)} new records: {records_to_create}")
+                
+        except Exception as e:
+            db.rollback()
+            errors.append(f"Bulk update failed: {str(e)}")
+            print(f"Bulk update error: {str(e)}")
     
     # Invalidate token
     invalidate_token(token)
