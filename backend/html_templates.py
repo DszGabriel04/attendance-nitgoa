@@ -195,6 +195,11 @@ ATTENDANCE_FORM_HTML = """
                     document.getElementById('rollNumber').value = '';
                     submitBtn.style.display = 'none';
                     document.querySelector('.form-group').style.display = 'none';
+                }} else if (response.status === 409) {{
+                    messageDiv.innerHTML = '<div class="error-message">⚠️ You have already submitted your attendance for this session.</div>';
+                    document.getElementById('rollNumber').value = '';
+                    submitBtn.style.display = 'none';
+                    document.querySelector('.form-group').style.display = 'none';
                 }} else {{
                     messageDiv.innerHTML = `<div class="error-message">❌ ${{result.detail || 'Failed to mark attendance'}}</div>`;
                 }}

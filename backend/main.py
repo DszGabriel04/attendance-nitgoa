@@ -235,6 +235,9 @@ def invalidate_token(token: str) -> bool:
 def add_student_to_token(token: str, student_id: str) -> bool:
     with _tokens_lock:
         if token in _token_submissions:
+            # Check if student already submitted
+            if student_id in _token_submissions[token]:
+                return False  # Student already submitted
             _token_submissions[token].add(student_id)
             _token_timestamps[token][student_id] = time.time()  # Track submission time
             return True
@@ -420,7 +423,12 @@ def submit_attendance(payload: dict = Body(...), db: Session = Depends(get_db)):
     if add_student_to_token(token, student_id):
         return {"message": "Attendance submission recorded", "student_id": student_id}
     else:
-        raise HTTPException(status_code=400, detail="Failed to record attendance")
+        # Check if student already submitted
+        submitted_students = get_token_submissions(token)
+        if student_id in submitted_students:
+            raise HTTPException(status_code=409, detail="Attendance already submitted for this student")
+        else:
+            raise HTTPException(status_code=400, detail="Failed to record attendance")
 
 # when the CANCEL button is clicked; it invalidates the current token associated with QR, 
 # specifies that token saved earlier in dict, and commits attendance to database
