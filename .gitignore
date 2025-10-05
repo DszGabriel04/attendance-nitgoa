@@ -2,7 +2,6 @@ venv/
 .venv/
 */__pycache__/
 
-
 # Frontend stuff
 frontend/node_modules/
 */.vscode/

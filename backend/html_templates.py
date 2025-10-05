@@ -200,6 +200,11 @@ ATTENDANCE_FORM_HTML = """
                     document.getElementById('rollNumber').value = '';
                     submitBtn.style.display = 'none';
                     document.querySelector('.form-group').style.display = 'none';
+                }} else if (response.status === 404) {{
+                    messageDiv.innerHTML = `<div class="error-message">❌ ${{result.detail || 'Roll number not found in this class'}}</div>`;
+                    // Allow user to try again with a different roll number
+                    document.getElementById('rollNumber').value = '';
+                    document.getElementById('rollNumber').focus();
                 }} else {{
                     messageDiv.innerHTML = `<div class="error-message">❌ ${{result.detail || 'Failed to mark attendance'}}</div>`;
                 }}

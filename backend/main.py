@@ -204,82 +204,59 @@ def get_attendance_history(class_id: str, db: Session = Depends(get_db)):
     return {"class_code": class_id, "attendance_history": history}
 
 
-_tokens: dict[str, bool] = {}
-_token_submissions: dict[str, Set[str]] = {}  # token -> set of student roll numbers
-_token_class_mapping: dict[str, str] = {}  # token -> class_id
-_token_timestamps: dict[str, dict[str, float]] = {}  # token -> {student_id: timestamp}
+
+_tokens: dict[str, dict] = {}
 _tokens_lock = threading.Lock()
 
 # save_token, is_token_active and invalidate_token, helper functions to interact with the token dictionary in a safe way
-def save_token(token: str, class_id: str = None) -> None:
+def save_token(token: str, class_id: str) -> None:
     with _tokens_lock:
-        _tokens[token] = True
-        _token_submissions[token] = set()
-        _token_timestamps[token] = {}  # Initialize timestamp tracking
-        if class_id:
-            _token_class_mapping[token] = class_id
+        _tokens[token] = {
+            "active": True,
+            "class_id": class_id,
+            "submissions": set()
+        }
 
 def is_token_active(token: str) -> bool:
     with _tokens_lock:
-        return bool(_tokens.get(token, False))
+        token_data = _tokens.get(token)
+        return bool(token_data and token_data.get("active", False))
 
 def invalidate_token(token: str) -> bool:
     with _tokens_lock:
-        removed = _tokens.pop(token, None) is not None
-        if removed:
-            _token_submissions.pop(token, None)
-            _token_class_mapping.pop(token, None)
-            _token_timestamps.pop(token, None)  # Clean up timestamp tracking
-        return removed
+        return _tokens.pop(token, None) is not None
+
+def get_token_class_id(token: str) -> str | None:
+    with _tokens_lock:
+        token_data = _tokens.get(token)
+        return token_data.get("class_id") if token_data else None
+
+def get_token_submissions(token: str) -> set[str]:
+    with _tokens_lock:
+        token_data = _tokens.get(token)
+        return token_data.get("submissions", set()).copy() if token_data else set()
 
 def add_student_to_token(token: str, student_id: str) -> bool:
     with _tokens_lock:
-        if token in _token_submissions:
-            # Check if student already submitted
-            if student_id in _token_submissions[token]:
-                return False  # Student already submitted
-            _token_submissions[token].add(student_id)
-            _token_timestamps[token][student_id] = time.time()  # Track submission time
-            return True
-        return False
-
-def get_token_submissions(token: str) -> Set[str]:
-    with _tokens_lock:
-        return _token_submissions.get(token, set()).copy()
-
-def get_token_class_id(token: str) -> str:
-    with _tokens_lock:
-        return _token_class_mapping.get(token, None)
+        token_data = _tokens.get(token)
+        if not token_data or not token_data.get("active", False):
+            return False
+        if student_id in token_data["submissions"]:
+            return False
+        token_data["submissions"].add(student_id)
+        return True
 
 def get_token_submission_stats(token: str) -> dict:
-    """Get detailed submission statistics for bulk operations"""
     with _tokens_lock:
-        if token not in _token_submissions:
-            return {}
-        
-        submissions = _token_submissions[token]
-        timestamps = _token_timestamps.get(token, {})
-        current_time = time.time()
-        
-        # Calculate recent submissions (last 30 seconds)
-        recent_submissions = [
-            student_id for student_id in submissions 
-            if current_time - timestamps.get(student_id, 0) <= 30
-        ]
-        
+        token_data = _tokens.get(token)
+        submissions = token_data.get("submissions", set()) if token_data else set()
         return {
             "total_submissions": len(submissions),
-            "recent_submissions": len(recent_submissions),
-            "recent_students": recent_submissions,
             "all_students": list(submissions),
+            "recent_submissions": len(submissions),
+            "recent_students": list(submissions),
             "ready_for_bulk": len(submissions) > 0
         }
-
-
-# Once done with the frontend put the URL that opens once you scan the QR code here
-REDIRECT_URL = "https://google.com"
-
-
 
 # builds the qrcode png image and returns it as bytes
 def make_qr_png_bytes(data: str, box_size: int = 10, border: int = 4, error_correction=ERROR_CORRECT_M) -> bytes:
