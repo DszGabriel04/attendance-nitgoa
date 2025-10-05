@@ -32,6 +32,7 @@ export default function QRAttendance() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [submittedStudents, setSubmittedStudents] = useState<string[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Theme colors
   const backgroundColor = useThemeColor({}, 'background');
@@ -46,30 +47,62 @@ export default function QRAttendance() {
     }
   }, [classId]);
 
-  // Poll for status updates
+  // Poll for status updates with smart polling
   useEffect(() => {
     let interval: any;
+    let isActive = true;
+    
+    const pollStatus = async () => {
+      if (!isActive || !qrData?.token) return;
+      
+      try {
+        const statusResult = await getQRCodeStatus(qrData.token);
+        if (statusResult.success && statusResult.data) {
+          setSubmittedCount(statusResult.data.submitted_count);
+          setSubmittedStudents(statusResult.data.submitted_students);
+        }
+      } catch (error) {
+        console.error('Failed to get status:', error);
+        // If there's an error, don't spam the server
+        return;
+      }
+    };
     
     if (qrData?.token) {
-      interval = setInterval(async () => {
-        try {
-          const statusResult = await getQRCodeStatus(qrData.token);
-          if (statusResult.success && statusResult.data) {
-            setSubmittedCount(statusResult.data.submitted_count);
-            setSubmittedStudents(statusResult.data.submitted_students);
-          }
-        } catch (error) {
-          console.error('Failed to get status:', error);
-        }
-      }, 3000); // Poll every 3 seconds
+      // Initial poll
+      pollStatus();
+      
+      // Set up interval polling
+      interval = setInterval(() => {
+        pollStatus();
+      }, 8000); // Poll every 8 seconds
     }
 
     return () => {
+      isActive = false;
       if (interval) {
         clearInterval(interval);
       }
     };
   }, [qrData?.token]);
+
+  const handleRefreshStatus = async () => {
+    if (!qrData?.token) return;
+    
+    setIsRefreshing(true);
+    try {
+      const statusResult = await getQRCodeStatus(qrData.token);
+      if (statusResult.success && statusResult.data) {
+        setSubmittedCount(statusResult.data.submitted_count);
+        setSubmittedStudents(statusResult.data.submitted_students);
+      }
+    } catch (error) {
+      console.error('Failed to refresh status:', error);
+      Alert.alert('Error', 'Failed to refresh status');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const generateQR = async () => {
     if (!classId) {
@@ -97,43 +130,21 @@ export default function QRAttendance() {
   const handleCancel = async () => {
     console.log('Cancel button pressed');
     if (!qrData?.token) {
-      console.log('No token available');
+      console.log('No token available, going back...');
       router.back();
       return;
     }
 
+    console.log(`Submitted count: ${submittedCount}`);
+    
+    // Skip alerts and directly perform cancel
     if (submittedCount === 0) {
-      Alert.alert(
-        'No Submissions',
-        'No students have scanned the QR code yet. Are you sure you want to cancel?',
-        [
-          { text: 'Keep QR Active', style: 'cancel' },
-          {
-            text: 'Cancel QR Code',
-            style: 'destructive',
-            onPress: async () => {
-              await performCancel();
-            }
-          }
-        ]
-      );
-      return;
+      console.log('No submissions - cancelling QR code...');
+    } else {
+      console.log(`${submittedCount} student(s) have scanned - finalizing attendance...`);
     }
-
-    Alert.alert(
-      'Finalize Attendance',
-      `${submittedCount} student(s) have scanned the QR code. Cancelling will mark them as present. Continue?`,
-      [
-        { text: 'Keep QR Active', style: 'cancel' },
-        {
-          text: `Mark ${submittedCount} Present`,
-          style: 'default',
-          onPress: async () => {
-            await performCancel();
-          }
-        }
-      ]
-    );
+    
+    await performCancel();
   };
 
   const performCancel = async () => {
@@ -147,60 +158,33 @@ export default function QRAttendance() {
       if (result.success && result.data) {
         const { students_marked_present, submitted_students, errors } = result.data;
         
-        let message = '';
-        if (students_marked_present > 0) {
-          message = `✅ Successfully marked ${students_marked_present} student(s) as present`;
-          if (submitted_students && submitted_students.length > 0) {
-            message += `\n\nStudents marked present:\n${submitted_students.join(', ')}`;
-          }
-        } else {
-          message = 'QR code cancelled. No students were marked present.';
+        console.log(`Successfully marked ${students_marked_present} student(s) as present`);
+        if (submitted_students && submitted_students.length > 0) {
+          console.log('Students marked present:', submitted_students.join(', '));
         }
-        
         if (errors && errors.length > 0) {
-          message += `\n\nErrors:\n${errors.join('\n')}`;
+          console.log('Errors:', errors.join(', '));
         }
-
-        Alert.alert('Attendance Finalized', message, [
-          { text: 'OK', onPress: () => router.back() }
-        ]);
       } else {
         console.log('Cancel failed:', result.error);
-        Alert.alert('Warning', 'Failed to finalize attendance, but QR code has been cancelled.', [
-          { text: 'OK', onPress: () => router.back() }
-        ]);
       }
     } catch (error) {
       console.log('Cancel error:', error);
-      Alert.alert('Error', 'Failed to cancel QR code. Please try again.', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
     }
+    
+    // Always navigate back after cancelling, regardless of success/failure
+    console.log('Navigating back to add-attendance page...');
+    router.back();
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
+    console.log('Back button pressed');
     if (qrData?.token) {
-      Alert.alert(
-        'Cancel QR Code?',
-        'Going back will cancel the current QR code. Are you sure?',
-        [
-          {
-            text: 'Stay',
-            style: 'cancel'
-          },
-          {
-            text: 'Cancel QR & Go Back',
-            style: 'destructive',
-            onPress: async () => {
-              await cancelQRCode(qrData.token);
-              router.back();
-            }
-          }
-        ]
-      );
-    } else {
-      router.back();
+      console.log('QR code active - cancelling and going back...');
+      await cancelQRCode(qrData.token);
     }
+    console.log('Navigating back...');
+    router.back();
   };
 
   const { width } = Dimensions.get('window');
@@ -242,8 +226,17 @@ export default function QRAttendance() {
           {/* Status Card */}
           <View style={[styles.statusCard, { backgroundColor: cardBackground }]}>
             <View style={styles.statusHeader}>
-              <Ionicons name="people-outline" size={20} color={primaryColor} />
-              <ThemedText style={styles.statusTitle}>Scanned Students</ThemedText>
+              <View style={styles.statusHeaderLeft}>
+                <Ionicons name="people-outline" size={20} color={primaryColor} />
+                <ThemedText style={styles.statusTitle}>Scanned Students</ThemedText>
+              </View>
+              <TouchableOpacity onPress={handleRefreshStatus} disabled={isRefreshing}>
+                <Ionicons 
+                  name={isRefreshing ? "sync" : "refresh-outline"} 
+                  size={20} 
+                  color={isRefreshing ? '#999' : primaryColor}
+                />
+              </TouchableOpacity>
             </View>
             <View style={styles.statusContent}>
               <ThemedText style={[styles.countText, { color: primaryColor }]}>
@@ -472,8 +465,13 @@ const styles = StyleSheet.create({
   statusHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     marginBottom: 12,
+  },
+  statusHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   statusTitle: {
     fontSize: 16,

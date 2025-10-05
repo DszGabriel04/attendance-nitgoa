@@ -1,7 +1,7 @@
 
 from fastapi import Body, FastAPI, Depends, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse, HTMLResponse, HTMLResponse
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse, HTMLResponse
 from sqlalchemy import func, case, select
 
 from sqlalchemy.orm import Session
@@ -15,6 +15,7 @@ from typing import List, Dict, Set
 from schemas import AttendanceRequest
 from datetime import date
 import threading
+from html_templates import ATTENDANCE_FORM_HTML, TOKEN_EXPIRED_HTML
 
 app = FastAPI()
 
@@ -297,32 +298,31 @@ def generate_qr(
 
 
 
-# 1) to VERIFY that token specified as a query parameter is valid (dictionary lookup), direct redirect to app
+# QR code validation page - shows form for student to enter roll number
 @app.get("/qr/validate", name="validate_qr")
-def validate_qr(request: Request, token: str = Query(...)):
+def validate_qr(token: str = Query(...), db: Session = Depends(get_db)):
     if not is_token_active(token):
-        raise HTTPException(status_code=410, detail="Token invalid or cancelled")
+        # Return expired token page
+        return HTMLResponse(content=TOKEN_EXPIRED_HTML)
     
-    # Get user agent to determine the best redirect approach
-    user_agent = request.headers.get("user-agent", "").lower()
+    # Get class information
+    class_id = get_token_class_id(token)
+    if not class_id:
+        raise HTTPException(status_code=400, detail="Invalid token configuration")
     
-    # For development/testing, try Expo deep link format
-    if "expo" in user_agent or "localhost" in str(request.base_url):
-        # Expo development deep link
-        expo_url = f"exp://192.168.1.100:8081/--/qr-student?token={token}"
-        return RedirectResponse(url=expo_url, status_code=302)
+    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
     
-    # For mobile browsers, try the custom app scheme
-    if any(mobile in user_agent for mobile in ["android", "iphone", "mobile"]):
-        app_url = f"nitgoa-attendance://qr-student?token={token}"
-        return RedirectResponse(url=app_url, status_code=302)
+    # Format the HTML template with class information
+    html_content = ATTENDANCE_FORM_HTML.format(
+        subject_name=class_obj.subject_name,
+        class_id=class_obj.id,
+        current_date=date.today().strftime('%B %d, %Y'),
+        token=token
+    )
     
-    # For desktop browsers or when deep link fails, redirect to the web app
-    # This prevents the "address wasn't understood" error
-    frontend_url = f"http://localhost:8081/qr-student?token={token}"
-    return RedirectResponse(url=frontend_url, status_code=302)
-
-
+    return HTMLResponse(content=html_content)
 
 # Get QR code status (number of students submitted)
 @app.get("/qr/status")
@@ -334,31 +334,6 @@ def get_qr_status(token: str = Query(...)):
     return {
         "submitted_count": len(submitted_students),
         "submitted_students": list(submitted_students)
-    }
-
-# Get class information for a token
-@app.get("/qr/class-info")
-def get_class_info(token: str = Query(...), db: Session = Depends(get_db)):
-    if not is_token_active(token):
-        raise HTTPException(status_code=410, detail="Token invalid or cancelled")
-    
-    class_id = get_token_class_id(token)
-    if not class_id:
-        raise HTTPException(status_code=400, detail="Invalid token configuration")
-    
-    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
-    if not class_obj:
-        raise HTTPException(status_code=404, detail="Class not found")
-    
-    # Get faculty information
-    faculty = db.query(models.Faculty).filter(models.Faculty.id == class_obj.faculty_id).first()
-    faculty_name = faculty.first_name if faculty else "Unknown"
-    
-    return {
-        "id": class_obj.id,
-        "subject_name": class_obj.subject_name,
-        "faculty_name": faculty_name,
-        "date": date.today().strftime('%B %d, %Y')
     }
 
 # Submit attendance via QR code

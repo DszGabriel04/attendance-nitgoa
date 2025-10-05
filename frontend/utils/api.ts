@@ -1,6 +1,6 @@
 // API configuration
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:10000";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 
 
 // API response types
@@ -217,6 +217,47 @@ export async function getAttendanceHistory(classId: string): Promise<{ success: 
     return { 
       success: false, 
       error: 'Failed to fetch attendance history. Please check if the server is running.' 
+    };
+  }
+}
+
+// Function to get today's attendance status for all students in a class
+export async function getTodayAttendance(classId: string): Promise<{ success: boolean; attendance?: Record<string, string>; error?: string }> {
+  try {
+    const historyResult = await getAttendanceHistory(classId);
+    
+    if (!historyResult.success || !historyResult.data) {
+      return { 
+        success: false, 
+        error: historyResult.error || 'Failed to fetch attendance history' 
+      };
+    }
+
+    // Get today's date in the same format as the backend
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    // Filter attendance records for today and convert to the format expected by the UI
+    const todayAttendance: Record<string, string> = {};
+    
+    historyResult.data.attendance_history.forEach(record => {
+      // Convert date to YYYY-MM-DD format for comparison
+      const recordDate = new Date(record.date).toISOString().split('T')[0];
+      
+      if (recordDate === today) {
+        // Convert "P"/"A" to "present"/"absent"
+        todayAttendance[record.student_id] = record.status === 'P' ? 'present' : 'absent';
+      }
+    });
+
+    return { 
+      success: true, 
+      attendance: todayAttendance 
+    };
+  } catch (error) {
+    console.error('Error fetching today\'s attendance:', error);
+    return { 
+      success: false, 
+      error: 'Failed to fetch today\'s attendance' 
     };
   }
 }
@@ -512,41 +553,6 @@ export async function generateQRCode(classId: string, length: number = 16, boxSi
   }
 }
 
-// Get class information for QR token
-export async function getQRClassInfo(token: string): Promise<{ success: boolean; data?: { id: string; subject_name: string; faculty_name: string; date: string }; error?: string }> {
-  try {
-    const url = new URL(`${API_BASE_URL}/qr/class-info`);
-    url.searchParams.append('token', token);
-
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { 
-        success: false, 
-        error: errorData.detail || 'Failed to get class information' 
-      };
-    }
-
-    const data = await response.json();
-    return { 
-      success: true, 
-      data 
-    };
-  } catch (error) {
-    console.error('QR class info error:', error);
-    return { 
-      success: false, 
-      error: 'Failed to get class information. Please check your connection.' 
-    };
-  }
-}
-
 // Get QR code status (number of students who have scanned)
 export async function getQRCodeStatus(token: string): Promise<{ success: boolean; data?: { submitted_count: number; submitted_students: string[] }; error?: string }> {
   try {
@@ -578,42 +584,6 @@ export async function getQRCodeStatus(token: string): Promise<{ success: boolean
     return { 
       success: false, 
       error: 'Failed to get QR code status. Please check your connection.' 
-    };
-  }
-}
-
-// Submit attendance via QR code
-export async function submitQRAttendance(token: string, studentId: string): Promise<{ success: boolean; data?: any; error?: string }> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/qr/submit-attendance`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        token: token,
-        student_id: studentId
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { 
-        success: false, 
-        error: errorData.detail || 'Failed to submit attendance' 
-      };
-    }
-
-    const data = await response.json();
-    return { 
-      success: true, 
-      data 
-    };
-  } catch (error) {
-    console.error('Submit attendance error:', error);
-    return { 
-      success: false, 
-      error: 'Failed to submit attendance. Please check your connection.' 
     };
   }
 }

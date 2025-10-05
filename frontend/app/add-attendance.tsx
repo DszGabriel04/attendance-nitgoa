@@ -1,5 +1,5 @@
 //add-attendance.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -9,12 +9,12 @@ import {
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { getClassStudentsFromHistory, getClasses, submitAttendance, updateAttendance } from '@/utils/api';
+import { getClassStudentsFromHistory, getClasses, submitAttendance, updateAttendance, getTodayAttendance } from '@/utils/api';
 
 export default function AttendanceUI() {
   const router = useRouter();
@@ -28,6 +28,7 @@ export default function AttendanceUI() {
   const [students, setStudents] = useState<Array<{ id: string; name: string }>>([]);
   const [attendanceTaken, setAttendanceTaken] = useState<string>('No');
   const [classSubject, setClassSubject] = useState<string>('');
+  const [isRefreshingAttendance, setIsRefreshingAttendance] = useState(false);
   
   // Theme colors
   const backgroundColor = useThemeColor({}, 'background');
@@ -35,6 +36,24 @@ export default function AttendanceUI() {
   const primaryColor = useThemeColor({}, 'buttonPrimary');
   const successColor = useThemeColor({}, 'success');
   const dangerColor = useThemeColor({}, 'danger');
+
+  // Function to load today's attendance
+  const loadTodayAttendance = async () => {
+    if (!classId) return;
+    
+    try {
+      setIsRefreshingAttendance(true);
+      const attendanceResult = await getTodayAttendance(classId);
+      if (attendanceResult.success && attendanceResult.attendance) {
+        //console.log('Loaded today\'s attendance:', attendanceResult.attendance);
+        setAttendance(attendanceResult.attendance);
+      }
+    } catch (error) {
+      console.error('Error loading today\'s attendance:', error);
+    } finally {
+      setIsRefreshingAttendance(false);
+    }
+  };
 
   // Fetch class data and students on component mount
   useEffect(() => {
@@ -81,6 +100,9 @@ export default function AttendanceUI() {
         }));
 
         setStudents(studentsList);
+        
+        // Load today's attendance after students are loaded
+        await loadTodayAttendance();
       } catch (error) {
         console.error('Error fetching class data:', error);
         Alert.alert('Error', 'Failed to load class data');
@@ -91,6 +113,16 @@ export default function AttendanceUI() {
 
     fetchClassData();
   }, [classId, router]);
+
+  // Refresh attendance when screen comes into focus (e.g., returning from QR page)
+  useFocusEffect(
+    useCallback(() => {
+      if (classId && students.length > 0) {
+        //console.log('Screen focused - refreshing attendance data');
+        loadTodayAttendance();
+      }
+    }, [classId, students.length])
+  );
 
   const handleAttendanceChange = (studentId: string, status: string) => {
     setAttendance(prev => ({
@@ -230,7 +262,12 @@ export default function AttendanceUI() {
         </TouchableOpacity>
         
         <View style={styles.headerInfo}>
-          <ThemedText style={styles.title}>Attendance</ThemedText>
+          <View style={styles.titleRow}>
+            <ThemedText style={styles.title}>Attendance</ThemedText>
+            {isRefreshingAttendance && (
+              <ActivityIndicator size="small" color={primaryColor} style={styles.refreshIndicator} />
+            )}
+          </View>
           <ThemedText style={styles.classInfo}>Class: {String(classId)}</ThemedText>
           {classSubject && <ThemedText style={styles.subjectInfo}>{String(classSubject)}</ThemedText>}
         </View>
@@ -365,9 +402,17 @@ const styles = StyleSheet.create({
   headerInfo: {
     alignItems: 'flex-end',
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  refreshIndicator: {
+    marginLeft: 4,
   },
   classInfo: {
     fontSize: 14,
