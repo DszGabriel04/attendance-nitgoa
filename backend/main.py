@@ -68,7 +68,7 @@ def create_class(class_data: schemas.StudentsBatchCreate, db: Session = Depends(
     today = date.today()
     for student in class_data.students:
         existing_attendance = db.query(models.Attendance).filter(models.Attendance.class_id == class_data.id, models.Attendance.student_id == student.id, models.Attendance.date == today).first()
-        if not existing_attendance:     db.add(models.Attendance(class_id=class_data.id, student_id=student.id, date=today, present=True))
+        if not existing_attendance:     db.add(models.Attendance(class_id=class_data.id, student_id=student.id, date=today, present=False))
 
     db.commit()
     return {"message": f"Class '{class_data.id}' created with {len(class_data.students)} students, all marked present for today"}
