@@ -64,6 +64,7 @@ def create_class(class_data: schemas.StudentsBatchCreate, db: Session = Depends(
     for student in class_data.students:
         existing_student = db.query(models.Student).filter(models.Student.id == student.id).first()
         if not existing_student:    db.add(models.Student(id=student.id, name=student.name))
+    db.flush()
 
     # add student's attendance entries
     today = date.today()
