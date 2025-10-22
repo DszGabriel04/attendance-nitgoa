@@ -58,6 +58,7 @@ def create_class(class_data: schemas.StudentsBatchCreate, db: Session = Depends(
     existing_class = db.query(models.Class).filter(models.Class.id == class_data.id).first()
     if existing_class:      raise HTTPException(status_code=400, detail=f"Class '{class_data.id}' already exists. Please delete the existing class before creating a new one.")
     db.add(models.Class(id=class_data.id, subject_name=class_data.subject_name,faculty_id=class_data.faculty_id))
+    db.flush()
 
     #add students names with roll in the students database
     for student in class_data.students:
