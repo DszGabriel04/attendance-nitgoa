@@ -1,3 +1,7 @@
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { Platform } from 'react-native';
+
 // API configuration
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
@@ -638,6 +642,88 @@ export async function cancelQRCode(token: string): Promise<{ success: boolean; d
     return { 
       success: false, 
       error: 'Failed to cancel QR code. Please check your connection.' 
+    };
+  }
+}
+
+// Download attendance Excel file
+export async function downloadAttendanceExcel(classId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (Platform.OS === 'web') {
+      // Web platform: Use traditional browser download
+      const response = await fetch(`${API_BASE_URL}/attendance/export/${classId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Get the blob from response
+      const blob = await response.blob();
+      
+      // Create download link for web
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Get filename from content-disposition header or use default
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = `attendance_${classId}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      return { success: true };
+    } else {
+      // Mobile platform: Use expo-file-system and expo-sharing
+      const filename = `attendance_${classId}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const fileUri = FileSystem.documentDirectory + filename;
+
+      // Download the file
+      const downloadResult = await FileSystem.downloadAsync(
+        `${API_BASE_URL}/attendance/export/${classId}`,
+        fileUri
+      );
+
+      if (downloadResult.status !== 200) {
+        throw new Error(`Download failed with status: ${downloadResult.status}`);
+      }
+
+      // Check if sharing is available on the device
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        // Share the file (this will open a menu to save/share the file)
+        await Sharing.shareAsync(downloadResult.uri, {
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          dialogTitle: 'Save Excel File',
+          UTI: 'org.openxmlformats.spreadsheetml.sheet'
+        });
+      } else {
+        // If sharing is not available, the file is still downloaded to the app's document directory
+        console.log('File downloaded to:', downloadResult.uri);
+      }
+
+      return { success: true };
+    }
+  } catch (error) {
+    console.error('Error downloading Excel file:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to download Excel file'
     };
   }
 }

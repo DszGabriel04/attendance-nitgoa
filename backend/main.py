@@ -18,6 +18,12 @@ import threading
 import time
 from html_templates import ATTENDANCE_FORM_HTML, TOKEN_EXPIRED_HTML
 
+# Add imports for Excel functionality
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils.dataframe import dataframe_to_rows
+
 app = FastAPI()
 
 # Add CORS middleware
@@ -208,6 +214,156 @@ def get_attendance_history(class_id: str, db: Session = Depends(get_db)):
 
     history = [ {"date": record.date, "student_id": record.student_id, "student_name": record.student_name, "status": "P" if record.present else "A"} for record in attendance_records]
     return {"class_code": class_id, "attendance_history": history}
+
+
+@app.get("/attendance/export/{class_id}")
+def export_attendance_excel(class_id: str, db: Session = Depends(get_db)):
+    """
+    Generate Excel file for attendance data of a specific class
+    Returns Excel file as streaming response with formatted data
+    """
+    # Check if class exists
+    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+    
+    # Fetch attendance records with student details
+    attendance_records = (
+        db.query(
+            models.Attendance.date,
+            models.Student.id.label("student_id"),
+            models.Student.name.label("student_name"),
+            models.Attendance.present
+        )
+        .join(models.Student, models.Student.id == models.Attendance.student_id)
+        .filter(models.Attendance.class_id == class_obj.id)
+        .order_by(models.Attendance.date.asc(), models.Student.id.asc())
+        .all()
+    )
+    
+    if not attendance_records:
+        raise HTTPException(status_code=404, detail="No attendance data found for this class")
+    
+    # Transform data for Excel format - organize by student and date
+    dates = sorted(list(set([str(record.date) for record in attendance_records])))
+    students = {}
+    
+    # Organize attendance data by student
+    for record in attendance_records:
+        student_id = record.student_id
+        if student_id not in students:
+            students[student_id] = {
+                'name': record.student_name,
+                'attendance': {}
+            }
+        students[student_id]['attendance'][str(record.date)] = 'P' if record.present else 'A'
+    
+    # Create Excel workbook with proper formatting
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Attendance - {class_id}"
+    
+    # Set up column headers
+    headers = ['Roll No', 'Student Name'] + dates + ['Total Present', 'Total Classes', 'Percentage']
+    
+    # Define Excel styling for professional appearance
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    present_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")  # Light green
+    absent_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")   # Light red
+    
+    # Add class title row
+    ws.insert_rows(1)
+    ws.merge_cells('A1:E1')
+    title_cell = ws.cell(row=1, column=1, value=f"Attendance Report - {class_obj.subject_name} ({class_id})")
+    title_cell.font = Font(size=16, bold=True)
+    title_cell.alignment = Alignment(horizontal='center')
+    
+    # Add column headers with styling
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=2, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+    
+    # Add student data rows
+    row = 3
+    for student_id in sorted(students.keys()):
+        student_data = students[student_id]
+        
+        # Add basic student information
+        ws.cell(row=row, column=1, value=student_id).border = border
+        ws.cell(row=row, column=2, value=student_data['name']).border = border
+        
+        # Add attendance data with color coding
+        present_count = 0
+        total_classes = len(dates)
+        
+        for col, d8 in enumerate(dates, 3):
+            status = student_data['attendance'].get(d8, '-')
+            cell = ws.cell(row=row, column=col, value=status)
+            cell.border = border
+            cell.alignment = Alignment(horizontal='center')
+            
+            # Apply color coding for attendance status
+            if status == 'P':
+                cell.fill = present_fill
+                present_count += 1
+            elif status == 'A':
+                cell.fill = absent_fill
+        
+        # Calculate and add summary statistics
+        percentage = (present_count / total_classes * 100) if total_classes > 0 else 0
+        
+        ws.cell(row=row, column=len(dates) + 3, value=present_count).border = border
+        ws.cell(row=row, column=len(dates) + 4, value=total_classes).border = border
+        
+        percentage_cell = ws.cell(row=row, column=len(dates) + 5, value=f"{percentage:.1f}%")
+        percentage_cell.border = border
+        percentage_cell.alignment = Alignment(horizontal='center')
+        
+        row += 1
+    
+    # Optimize column widths for better readability
+    ws.column_dimensions['A'].width = 12  # Roll No
+    ws.column_dimensions['B'].width = 25  # Student Name
+    
+    # Set width for date columns
+    for col in range(3, len(dates) + 3):
+        column_letter = chr(64 + col) if col <= 26 else f"A{chr(64 + col - 26)}"
+        ws.column_dimensions[column_letter].width = 12
+    
+    # Set width for summary columns
+    summary_start_col = len(dates) + 3
+    for i in range(3):  # Total Present, Total Classes, Percentage
+        col_num = summary_start_col + i
+        column_letter = chr(64 + col_num) if col_num <= 26 else f"A{chr(64 + col_num - 26)}"
+        ws.column_dimensions[column_letter].width = 15
+    
+    # Save Excel file to memory buffer
+    excel_buffer = io.BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    
+    # Generate filename with current date
+    filename = f"attendance_{class_id}_{date.today().strftime('%Y%m%d')}.xlsx"
+    headers = {
+        'Content-Disposition': f'attachment; filename="{filename}"'
+    }
+    
+    # Return Excel file as streaming response
+    return StreamingResponse(
+        io.BytesIO(excel_buffer.getvalue()),
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers=headers
+    )
 
 
 
