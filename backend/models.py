@@ -6,9 +6,9 @@ from sqlalchemy.orm import sessionmaker
 # uvicorn main:app --reload; creates tables
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Always store DB in backend/ so main.py and seed scripts use the same file
-DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'database.db')}"
+DATABASE_URL = "postgresql+psycopg2://neondb_owner:npg_d9sVjNXkqU0A@ep-bitter-field-a1idz898-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(DATABASE_URL, pool_pre_ping=True,)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
