@@ -94,7 +94,7 @@ def delete_class(class_id: str = Path(..., description="ID of the class to delet
     return {"message": f"Class '{class_id}' and its attendance have been deleted. Students no longer in any class were also removed."}
 
 
-@app.get("/classes")
+@app.get("/classes/")
 def get_classes(db: Session = Depends(get_db)):
     today = date.today()
 
