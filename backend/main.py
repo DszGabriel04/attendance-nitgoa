@@ -66,14 +66,14 @@ def create_class(class_data: schemas.StudentsBatchCreate, db: Session = Depends(
         if not existing_student:    db.add(models.Student(id=student.id, name=student.name))
     db.flush()
 
-    # add student's attendance entries
+    # add student's attendance entries (initialized as absent)
     today = date.today()
     for student in class_data.students:
         existing_attendance = db.query(models.Attendance).filter(models.Attendance.class_id == class_data.id, models.Attendance.student_id == student.id, models.Attendance.date == today).first()
         if not existing_attendance:     db.add(models.Attendance(class_id=class_data.id, student_id=student.id, date=today, present=False))
 
     db.commit()
-    return {"message": f"Class '{class_data.id}' created with {len(class_data.students)} students, all marked present for today"}
+    return {"message": f"Class '{class_data.id}' created with {len(class_data.students)} students, attendance initialized for today"}
 
 
 @app.delete("/classes/{class_id}")
@@ -100,10 +100,14 @@ def delete_class(class_id: str = Path(..., description="ID of the class to delet
 def get_classes(db: Session = Depends(get_db)):
     today = date.today()
 
-    # Attendance counts per class for today
-    attendance_counts = ( select( models.Attendance.class_id, func.count(models.Attendance.id).label("count_today")).where(models.Attendance.date == today).group_by(models.Attendance.class_id).subquery())
+    # Count present attendance per class for today (only count if someone is marked present)
+    # This ensures that attendance is only considered "taken" when at least one student is marked present,
+    # not just when attendance records exist (which happens automatically on class creation with present=False)
+    attendance_counts = ( select( models.Attendance.class_id, func.count(models.Attendance.id).label("count_present")).where(models.Attendance.date == today, models.Attendance.present == True).group_by(models.Attendance.class_id).subquery())
 
-    stmt = (select(models.Class.id, models.Class.subject_name, case( (attendance_counts.c.count_today > 0, "Yes"), else_="No").label("attendance_taken"))
+    # Join classes with attendance counts to determine if attendance has been actually taken today
+    # "Yes" = at least one student marked present today, "No" = no students marked present today
+    stmt = (select(models.Class.id, models.Class.subject_name, case( (attendance_counts.c.count_present > 0, "Yes"), else_="No").label("attendance_taken"))
         .outerjoin(attendance_counts, models.Class.id == attendance_counts.c.class_id))
 
 
