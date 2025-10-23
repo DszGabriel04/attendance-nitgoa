@@ -47,7 +47,11 @@ export default function AttendanceUI() {
       const attendanceResult = await getTodayAttendance(classId);
       if (attendanceResult.success && attendanceResult.attendance) {
         //console.log('Loaded today\'s attendance:', attendanceResult.attendance);
-        setAttendance(attendanceResult.attendance);
+        // Merge today's attendance with existing state (preserving defaults)
+        setAttendance(prev => ({
+          ...prev,
+          ...attendanceResult.attendance
+        }));
       }
     } catch (error) {
       console.error('Error loading today\'s attendance:', error);
@@ -102,7 +106,14 @@ export default function AttendanceUI() {
 
         setStudents(studentsList);
         
-        // Load today's attendance after students are loaded
+        // Initialize all students as absent by default
+        const defaultAttendance: Record<string, string> = {};
+        studentsList.forEach(student => {
+          defaultAttendance[student.id] = 'absent';
+        });
+        setAttendance(defaultAttendance);
+        
+        // Load today's attendance after students are loaded (this will override defaults if attendance exists)
         await loadTodayAttendance();
       } catch (error) {
         console.error('Error fetching class data:', error);
