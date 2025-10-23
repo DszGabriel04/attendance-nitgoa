@@ -214,6 +214,7 @@ def get_attendance_history(class_id: str, db: Session = Depends(get_db)):
         .join(models.Student, models.Student.id == models.Attendance.student_id).filter(models.Attendance.class_id == class_obj.id) .order_by(models.Attendance.date.asc(), models.Student.id.asc()).all() )
 
     history = [ {"date": record.date, "student_id": record.student_id, "student_name": record.student_name, "status": "P" if record.present else "A"} for record in attendance_records]
+    
     return {"class_code": class_id, "attendance_history": history}
 
 
