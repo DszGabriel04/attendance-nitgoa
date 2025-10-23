@@ -18,6 +18,13 @@ import threading
 import time
 from html_templates import ATTENDANCE_FORM_HTML, TOKEN_EXPIRED_HTML
 
+# Add imports for Excel functionality
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.utils import get_column_letter
+
 app = FastAPI()
 
 # Add CORS middleware
@@ -66,14 +73,14 @@ def create_class(class_data: schemas.StudentsBatchCreate, db: Session = Depends(
         if not existing_student:    db.add(models.Student(id=student.id, name=student.name))
     db.flush()
 
-    # add student's attendance entries
+    # add student's attendance entries (initialized as absent)
     today = date.today()
     for student in class_data.students:
         existing_attendance = db.query(models.Attendance).filter(models.Attendance.class_id == class_data.id, models.Attendance.student_id == student.id, models.Attendance.date == today).first()
         if not existing_attendance:     db.add(models.Attendance(class_id=class_data.id, student_id=student.id, date=today, present=False))
 
     db.commit()
-    return {"message": f"Class '{class_data.id}' created with {len(class_data.students)} students, all marked present for today"}
+    return {"message": f"Class '{class_data.id}' created with {len(class_data.students)} students, attendance initialized for today"}
 
 
 @app.delete("/classes/{class_id}")
@@ -100,10 +107,14 @@ def delete_class(class_id: str = Path(..., description="ID of the class to delet
 def get_classes(db: Session = Depends(get_db)):
     today = date.today()
 
-    # Attendance counts per class for today
-    attendance_counts = ( select( models.Attendance.class_id, func.count(models.Attendance.id).label("count_today")).where(models.Attendance.date == today).group_by(models.Attendance.class_id).subquery())
+    # Count present attendance per class for today (only count if someone is marked present)
+    # This ensures that attendance is only considered "taken" when at least one student is marked present,
+    # not just when attendance records exist (which happens automatically on class creation with present=False)
+    attendance_counts = ( select( models.Attendance.class_id, func.count(models.Attendance.id).label("count_present")).where(models.Attendance.date == today, models.Attendance.present == True).group_by(models.Attendance.class_id).subquery())
 
-    stmt = (select(models.Class.id, models.Class.subject_name, case( (attendance_counts.c.count_today > 0, "Yes"), else_="No").label("attendance_taken"))
+    # Join classes with attendance counts to determine if attendance has been actually taken today
+    # "Yes" = at least one student marked present today, "No" = no students marked present today
+    stmt = (select(models.Class.id, models.Class.subject_name, case( (attendance_counts.c.count_present > 0, "Yes"), else_="No").label("attendance_taken"))
         .outerjoin(attendance_counts, models.Class.id == attendance_counts.c.class_id))
 
 
@@ -203,7 +214,146 @@ def get_attendance_history(class_id: str, db: Session = Depends(get_db)):
         .join(models.Student, models.Student.id == models.Attendance.student_id).filter(models.Attendance.class_id == class_obj.id) .order_by(models.Attendance.date.asc(), models.Student.id.asc()).all() )
 
     history = [ {"date": record.date, "student_id": record.student_id, "student_name": record.student_name, "status": "P" if record.present else "A"} for record in attendance_records]
+    
     return {"class_code": class_id, "attendance_history": history}
+
+
+@app.get("/attendance/export/{class_id}")
+def export_attendance_excel(class_id: str, db: Session = Depends(get_db)):
+    """
+    Generate Excel file for attendance data of a specific class
+    Returns Excel file as streaming response with formatted data
+    """
+    # Check if class exists
+    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+    
+    # Fetch attendance records with student details
+    attendance_records = (
+        db.query(
+            models.Attendance.date,
+            models.Student.id.label("student_id"),
+            models.Student.name.label("student_name"),
+            models.Attendance.present
+        )
+        .join(models.Student, models.Student.id == models.Attendance.student_id)
+        .filter(models.Attendance.class_id == class_obj.id)
+        .order_by(models.Attendance.date.asc(), models.Student.id.asc())
+        .all()
+    )
+    
+    if not attendance_records:
+        raise HTTPException(status_code=404, detail="No attendance data found for this class")
+    
+    # Transform data for Excel format - organize by student and date
+    dates = sorted(list(set([str(record.date) for record in attendance_records])))
+    students = {}
+    
+    # Organize attendance data by student
+    for record in attendance_records:
+        student_id = record.student_id
+        if student_id not in students:
+            students[student_id] = {
+                'name': record.student_name,
+                'attendance': {}
+            }
+        students[student_id]['attendance'][str(record.date)] = 'P' if record.present else 'A'
+    
+    # Create Excel workbook with proper formatting
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Attendance - {class_id}"
+    
+    # Set up column headers (removed Total Present and Total Classes columns)
+    headers = ['Roll No', 'Student Name'] + dates + ['Percentage']
+    
+    # Define Excel styling for professional appearance
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    present_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")  # Light green
+    absent_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")   # Light red
+    
+    # Add column headers with styling (no title row)
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+    
+    # Add student data rows (starting from row 2 since no title row)
+    row = 2
+    for student_id in sorted(students.keys()):
+        student_data = students[student_id]
+        
+        # Add basic student information
+        ws.cell(row=row, column=1, value=student_id).border = border
+        ws.cell(row=row, column=2, value=student_data['name']).border = border
+        
+        # Add attendance data with color coding
+        present_count = 0
+        total_classes = len(dates)
+        
+        for col, d8 in enumerate(dates, 3):
+            status = student_data['attendance'].get(d8, '-')
+            cell = ws.cell(row=row, column=col, value=status)
+            cell.border = border
+            cell.alignment = Alignment(horizontal='center')
+            
+            # Apply color coding for attendance status
+            if status == 'P':
+                cell.fill = present_fill
+                present_count += 1
+            elif status == 'A':
+                cell.fill = absent_fill
+        
+        # Calculate and add percentage (only percentage column now)
+        percentage = (present_count / total_classes * 100) if total_classes > 0 else 0
+        
+        percentage_cell = ws.cell(row=row, column=len(dates) + 3, value=f"{percentage:.1f}%")
+        percentage_cell.border = border
+        percentage_cell.alignment = Alignment(horizontal='center')
+        
+        row += 1
+    
+    # Optimize column widths for better readability
+    ws.column_dimensions['A'].width = 12  # Roll No
+    ws.column_dimensions['B'].width = 25  # Student Name
+    
+    # Set width for date columns
+    for col in range(3, len(dates) + 3):
+        column_letter = get_column_letter(col)
+        ws.column_dimensions[column_letter].width = 12
+    
+    # Set width for percentage column (only one summary column now)
+    percentage_col_num = len(dates) + 3
+    column_letter = get_column_letter(percentage_col_num)
+    ws.column_dimensions[column_letter].width = 15
+    
+    # Save Excel file to memory buffer
+    excel_buffer = io.BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    
+    # Generate filename with current date
+    filename = f"attendance_{class_id}_{date.today().strftime('%Y%m%d')}.xlsx"
+    headers = {
+        'Content-Disposition': f'attachment; filename="{filename}"'
+    }
+    
+    # Return Excel file as streaming response
+    return StreamingResponse(
+        io.BytesIO(excel_buffer.getvalue()),
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers=headers
+    )
 
 
 

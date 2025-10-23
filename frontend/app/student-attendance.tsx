@@ -16,7 +16,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedButton } from '@/components/ThemedButton';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { getAttendanceHistory, getClasses } from '@/utils/api';
+import { getAttendanceHistory, getClasses, downloadAttendanceExcel } from '@/utils/api';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -95,6 +95,7 @@ export default function StudentAttendance() {
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   const [headerScrollRef, setHeaderScrollRef] = useState<ScrollView | null>(null);
   const [rowScrollRefs, setRowScrollRefs] = useState<ScrollView[]>([]);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const cardBackground = useThemeColor({}, 'cardBackground');
   const successColor = useThemeColor({}, 'success');
@@ -179,6 +180,28 @@ export default function StudentAttendance() {
       await loadAttendanceData(classCode.trim());
     }
     setShowSuggestions(false);
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!classCode.trim()) {
+      Alert.alert('Error', 'Please select a class first');
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      const result = await downloadAttendanceExcel(classCode.trim());
+      if (result.success) {
+        Alert.alert('Success', 'Excel file downloaded successfully!');
+      } else {
+        Alert.alert('Error', result.error || 'Failed to download Excel file');
+      }
+    } catch (error) {
+      console.error('Error downloading Excel:', error);
+      Alert.alert('Error', 'Failed to download Excel file');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   // Function to handle synchronized scrolling
@@ -299,6 +322,18 @@ export default function StudentAttendance() {
               style={styles.searchButton}
             />
           </View>
+          
+          {/* Excel Download Button */}
+          {selectedClass && (
+            <View style={styles.downloadSection}>
+              <ThemedButton
+                title={isDownloading ? "Downloading..." : "Download Excel"}
+                onPress={handleDownloadExcel}
+                style={[styles.downloadButton, { backgroundColor: successColor }]}
+                disabled={isDownloading}
+              />
+            </View>
+          )}
           
           {/* Suggestions Dropdown */}
           {showSuggestions && filteredClasses.length > 0 && (
@@ -702,5 +737,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.7,
     textAlign: 'center',
+  },
+  downloadSection: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  downloadButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minWidth: 200,
   },
 });

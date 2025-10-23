@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { getClassStudentsFromHistory, getClasses, submitAttendance, updateAttendance, getTodayAttendance } from '@/utils/api';
+import { getClassStudentsFromHistory, getClasses, submitAttendance, updateAttendance, getTodayAttendance, downloadAttendanceExcel } from '@/utils/api';
 
 export default function AttendanceUI() {
   const router = useRouter();
@@ -29,6 +29,7 @@ export default function AttendanceUI() {
   const [attendanceTaken, setAttendanceTaken] = useState<string>('No');
   const [classSubject, setClassSubject] = useState<string>('');
   const [isRefreshingAttendance, setIsRefreshingAttendance] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   // Theme colors
   const backgroundColor = useThemeColor({}, 'background');
@@ -46,7 +47,11 @@ export default function AttendanceUI() {
       const attendanceResult = await getTodayAttendance(classId);
       if (attendanceResult.success && attendanceResult.attendance) {
         //console.log('Loaded today\'s attendance:', attendanceResult.attendance);
-        setAttendance(attendanceResult.attendance);
+        // Merge today's attendance with existing state (preserving defaults)
+        setAttendance(prev => ({
+          ...prev,
+          ...attendanceResult.attendance
+        }));
       }
     } catch (error) {
       console.error('Error loading today\'s attendance:', error);
@@ -101,7 +106,14 @@ export default function AttendanceUI() {
 
         setStudents(studentsList);
         
-        // Load today's attendance after students are loaded
+        // Initialize all students as absent by default
+        const defaultAttendance: Record<string, string> = {};
+        studentsList.forEach(student => {
+          defaultAttendance[student.id] = 'absent';
+        });
+        setAttendance(defaultAttendance);
+        
+        // Load today's attendance after students are loaded (this will override defaults if attendance exists)
         await loadTodayAttendance();
       } catch (error) {
         console.error('Error fetching class data:', error);
@@ -178,6 +190,28 @@ export default function AttendanceUI() {
       Alert.alert('Error', `Failed to ${attendanceTaken === 'No' ? 'submit' : 'update'} attendance: ` + errorMsg);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!classId) {
+      Alert.alert('Error', 'Class ID not available');
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      const result = await downloadAttendanceExcel(classId);
+      if (result.success) {
+        Alert.alert('Success', 'Excel file downloaded successfully!');
+      } else {
+        Alert.alert('Error', result.error || 'Failed to download Excel file');
+      }
+    } catch (error) {
+      console.error('Error downloading Excel:', error);
+      Alert.alert('Error', 'Failed to download Excel file');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -306,6 +340,21 @@ export default function AttendanceUI() {
               <Ionicons name="qr-code-outline" size={24} color={primaryColor} />
               <ThemedText style={styles.qrButtonText}>Generate QR Code for Attendance</ThemedText>
               <Ionicons name="chevron-forward" size={20} color={useThemeColor({}, 'icon')} />
+            </TouchableOpacity>
+            
+            {/* Excel Download Button */}
+            <TouchableOpacity
+              onPress={handleDownloadExcel}
+              style={[styles.downloadButton, { backgroundColor: successColor }]}
+              activeOpacity={0.7}
+              disabled={isDownloading}
+            >
+              <Ionicons name="download-outline" size={24} color="#fff" />
+              <ThemedText style={styles.downloadButtonText}>
+                {isDownloading ? "Downloading..." : "Download Excel Report"}
+              </ThemedText>
+              {!isDownloading && <Ionicons name="chevron-forward" size={20} color="#fff" />}
+              {isDownloading && <ActivityIndicator size="small" color="#fff" />}
             </TouchableOpacity>
           </View>
 
@@ -617,5 +666,24 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '500',
+  },
+  downloadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+    gap: 12,
+    marginTop: 12,
+  },
+  downloadButtonText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#fff',
   },
 });

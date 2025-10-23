@@ -10,10 +10,9 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 import { loginFaculty } from '@/utils/api';
 
 export default function LoginScreen() {
-  const [role, setRole] = useState<'faculty' | 'student' | null>(null);
+  const [role, setRole] = useState<'faculty' | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [rollNumber, setRollNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const router = useRouter();
@@ -46,9 +45,6 @@ export default function LoginScreen() {
         } else {
           setLoginError(result.error || 'Login failed');
         }
-      } else if (role === 'student') {
-        // TODO: Implement student login
-        router.push('/student-attendance');
       }
     } catch (error) {
       // Make sure we only set string errors, not objects
@@ -63,8 +59,6 @@ export default function LoginScreen() {
   const isFormValid = () => {
     if (role === 'faculty') {
       return username.trim() && password.trim();
-    } else if (role === 'student') {
-      return rollNumber.trim();
     }
     return false;
   };
@@ -98,22 +92,22 @@ export default function LoginScreen() {
             </TouchableOpacity>
             
             <TouchableOpacity
-              onPress={() => setRole('student')}
+              onPress={() => router.push('/student-attendance')}
               style={[
                 styles.roleButton, 
-                role === 'student' && [styles.selectedRole, { backgroundColor: primaryColor }]
+                styles.checkAttendanceButton
               ]}
             >
               <Text style={[
                 styles.roleText, 
-                role === 'student' && styles.selectedRoleText
+                styles.checkAttendanceText
               ]}>
-                Student
+                Attendance
               </Text>
             </TouchableOpacity>
           </View>
 
-          {role && (
+          {role === 'faculty' && (
             <Animated.View style={[styles.formContainer, { opacity: fadeAnim }]}>
               {loginError && (
                 <View style={styles.errorContainer}>
@@ -121,46 +115,30 @@ export default function LoginScreen() {
                 </View>
               )}
               
-              {role === 'faculty' ? (
-                <>
-                  <View style={styles.inputContainer}>
-                    <ThemedTextInput
-                      placeholder="Email"
-                      value={username}
-                      onChangeText={(text) => {
-                        setUsername(text);
-                        setLoginError(null); // Clear error when user types
-                      }}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                    />
-                  </View>
-                  
-                  <View style={styles.inputContainer}>
-                    <ThemedTextInput
-                      placeholder="Password"
-                      value={password}
-                      onChangeText={(text) => {
-                        setPassword(text);
-                        setLoginError(null); // Clear error when user types
-                      }}
-                      secureTextEntry
-                    />
-                  </View>
-                </>
-              ) : (
-                <View style={styles.inputContainer}>
-                  <ThemedTextInput
-                    placeholder="Roll Number"
-                    value={rollNumber}
-                    onChangeText={(text) => {
-                      setRollNumber(text);
-                      setLoginError(null); // Clear error when user types
-                    }}
-                    autoCapitalize="characters"
-                  />
-                </View>
-              )}
+              <View style={styles.inputContainer}>
+                <ThemedTextInput
+                  placeholder="Email"
+                  value={username}
+                  onChangeText={(text) => {
+                    setUsername(text);
+                    setLoginError(null); // Clear error when user types
+                  }}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
+              
+              <View style={styles.inputContainer}>
+                <ThemedTextInput
+                  placeholder="Password"
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    setLoginError(null); // Clear error when user types
+                  }}
+                  secureTextEntry
+                />
+              </View>
 
               <ThemedButton
                 title={isLoading ? 'Signing In...' : 'Sign In'}
@@ -252,6 +230,16 @@ const styles = StyleSheet.create({
   selectedRoleText: {
     color: '#ffffff',
     fontWeight: '600',
+  },
+  checkAttendanceButton: {
+    backgroundColor: '#42424233',
+    borderWidth: 1,
+    borderColor: '#42424266',
+  },
+  checkAttendanceText: {
+    color: '#b0bec5',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   formContainer: {
     marginTop: 10,

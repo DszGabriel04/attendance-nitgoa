@@ -13,101 +13,134 @@ ATTENDANCE_FORM_HTML = """
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #1a1a1a;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
+            color: #ECEDEE;
         }}
         .container {{ 
-            background: white;
+            background: #2d2d2d;
             border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            max-width: 500px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            max-width: 400px;
             width: 100%;
         }}
-        .header {{ text-align: center; margin-bottom: 30px; }}
-        .header h1 {{ color: #333; margin-bottom: 10px; font-size: 28px; }}
+        .header {{ text-align: center; margin-bottom: 25px; }}
+        .header h1 {{ 
+            color: #ECEDEE; 
+            margin-bottom: 8px; 
+            font-size: 36px; 
+            font-weight: 700;
+            letter-spacing: 1px;
+        }}
+        .header .subtitle {{ 
+            font-size: 18px; 
+            font-weight: 300; 
+            opacity: 0.8;
+            color: #B0BEC5;
+        }}
         .class-info {{ 
-            background: #f8f9fa;
+            background: rgba(255, 255, 255, 0.05);
             padding: 20px;
             border-radius: 12px;
-            margin-bottom: 30px;
-            border-left: 4px solid #667eea;
+            margin-bottom: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }}
-        .class-info h2 {{ color: #667eea; margin-bottom: 15px; font-size: 20px; }}
+        .class-info h2 {{ 
+            color: #4FC3F7; 
+            margin-bottom: 15px; 
+            font-size: 20px; 
+            font-weight: 600;
+        }}
         .info-row {{ 
             display: flex;
             justify-content: space-between;
             margin-bottom: 8px;
             padding: 5px 0;
         }}
-        .info-label {{ font-weight: 600; color: #555; }}
-        .info-value {{ color: #333; }}
-        .form-group {{ margin-bottom: 25px; }}
+        .info-label {{ font-weight: 600; color: #B0BEC5; }}
+        .info-value {{ color: #ECEDEE; }}
+        .form-group {{ margin-bottom: 20px; }}
         .form-group label {{ 
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
-            color: #333;
+            color: #ECEDEE;
             font-size: 16px;
         }}
         .form-group input {{ 
             width: 100%;
-            padding: 15px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
+            padding: 14px 16px;
+            border: 1px solid #555555;
+            border-radius: 12px;
             font-size: 16px;
+            background: #404040;
+            color: #ECEDEE;
             transition: all 0.3s ease;
+            min-height: 48px;
+        }}
+        .form-group input::placeholder {{
+            color: #B0BEC5;
         }}
         .form-group input:focus {{ 
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: #4FC3F7;
+            box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.1);
         }}
         .submit-btn {{ 
             width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            padding: 14px 20px;
+            background: #4FC3F7;
+            color: #ffffff;
             border: none;
-            border-radius: 10px;
-            font-size: 18px;
+            border-radius: 12px;
+            font-size: 16px;
             font-weight: 600;
+            letter-spacing: 0.5px;
             cursor: pointer;
-            transition: transform 0.2s ease;
+            transition: all 0.2s ease;
+            min-height: 48px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         }}
-        .submit-btn:hover {{ transform: translateY(-2px); }}
+        .submit-btn:hover {{ 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+        }}
         .submit-btn:disabled {{ 
-            opacity: 0.6;
+            opacity: 0.5;
             cursor: not-allowed;
             transform: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         }}
         .success-message {{ 
-            background: #d4edda;
-            color: #155724;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 20px;
+            background: rgba(76, 175, 80, 0.1);
+            color: #4CAF50;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 16px;
             text-align: center;
-            font-weight: 600;
+            font-weight: 500;
+            border: 1px solid rgba(76, 175, 80, 0.3);
         }}
         .error-message {{ 
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 20px;
+            background: rgba(244, 67, 54, 0.1);
+            color: #F44336;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 16px;
             text-align: center;
-            font-weight: 600;
+            font-weight: 500;
+            border: 1px solid rgba(244, 67, 54, 0.3);
         }}
         .footer {{
-            margin-top: 30px;
+            margin-top: 25px;
             text-align: center;
-            font-size: 12px;
-            color: #666;
+            font-size: 14px;
+            color: #B0BEC5;
             opacity: 0.7;
         }}
     </style>
@@ -115,7 +148,8 @@ ATTENDANCE_FORM_HTML = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>📚 Mark Attendance</h1>
+            <h1>NIT Goa</h1>
+            <div class="subtitle">Attendance Portal</div>
         </div>
         
         <div class="class-info">
@@ -191,25 +225,25 @@ ATTENDANCE_FORM_HTML = """
                 const result = await response.json();
                 
                 if (response.ok) {{
-                    messageDiv.innerHTML = '<div class="success-message">✅ Attendance marked successfully! You can close this page now.</div>';
+                    messageDiv.innerHTML = '<div class="success-message">Attendance marked successfully! You can close this page now.</div>';
                     document.getElementById('rollNumber').value = '';
                     submitBtn.style.display = 'none';
                     document.querySelector('.form-group').style.display = 'none';
                 }} else if (response.status === 409) {{
-                    messageDiv.innerHTML = '<div class="error-message">⚠️ You have already submitted your attendance for this session.</div>';
+                    messageDiv.innerHTML = '<div class="error-message">You have already submitted your attendance for this session.</div>';
                     document.getElementById('rollNumber').value = '';
                     submitBtn.style.display = 'none';
                     document.querySelector('.form-group').style.display = 'none';
                 }} else if (response.status === 404) {{
-                    messageDiv.innerHTML = `<div class="error-message">❌ ${{result.detail || 'Roll number not found in this class'}}</div>`;
+                    messageDiv.innerHTML = `<div class="error-message">${{result.detail || 'Roll number not found in this class'}}</div>`;
                     // Allow user to try again with a different roll number
                     document.getElementById('rollNumber').value = '';
                     document.getElementById('rollNumber').focus();
                 }} else {{
-                    messageDiv.innerHTML = `<div class="error-message">❌ ${{result.detail || 'Failed to mark attendance'}}</div>`;
+                    messageDiv.innerHTML = `<div class="error-message">${{result.detail || 'Failed to mark attendance'}}</div>`;
                 }}
             }} catch (error) {{
-                messageDiv.innerHTML = '<div class="error-message">❌ Network error. Please try again.</div>';
+                messageDiv.innerHTML = '<div class="error-message">Network error. Please try again.</div>';
             }} finally {{
                 if (submitBtn.style.display !== 'none') {{
                     submitBtn.disabled = false;
@@ -243,37 +277,57 @@ TOKEN_EXPIRED_HTML = """
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            background: #1a1a1a;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
+            color: #ECEDEE;
         }}
         .container {{ 
-            background: white;
+            background: #2d2d2d;
             border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             max-width: 400px;
             width: 100%;
             text-align: center;
         }}
-        .icon {{ font-size: 64px; margin-bottom: 20px; }}
-        h1 {{ color: #333; margin-bottom: 15px; font-size: 24px; }}
-        p {{ color: #666; line-height: 1.6; margin-bottom: 20px; }}
+        .icon {{ 
+            font-size: 64px; 
+            margin-bottom: 20px; 
+            color: #F44336;
+        }}
+        h1 {{ 
+            color: #ECEDEE; 
+            margin-bottom: 15px; 
+            font-size: 24px; 
+            font-weight: 600;
+        }}
+        p {{ 
+            color: #B0BEC5; 
+            line-height: 1.6; 
+            margin-bottom: 20px; 
+            font-size: 16px;
+        }}
         .retry-message {{ 
-            background: #fff3cd;
-            color: #856404;
+            background: rgba(255, 152, 0, 0.1);
+            color: #FF9800;
             padding: 15px;
             border-radius: 8px;
             margin-top: 20px;
+            border: 1px solid rgba(255, 152, 0, 0.3);
+        }}
+        .retry-message strong {{
+            color: #FF9800;
+            font-weight: 600;
         }}
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="icon">⚠️</div>
+        <div class="icon">⚠</div>
         <h1>QR Code Expired</h1>
         <p>This QR code has expired or been cancelled. Please ask your instructor to generate a new QR code for attendance.</p>
         <div class="retry-message">
