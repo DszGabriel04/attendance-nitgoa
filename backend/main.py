@@ -23,6 +23,7 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.utils import get_column_letter
 
 app = FastAPI()
 
@@ -327,12 +328,12 @@ def export_attendance_excel(class_id: str, db: Session = Depends(get_db)):
     
     # Set width for date columns
     for col in range(3, len(dates) + 3):
-        column_letter = chr(64 + col) if col <= 26 else f"A{chr(64 + col - 26)}"
+        column_letter = get_column_letter(col)
         ws.column_dimensions[column_letter].width = 12
     
     # Set width for percentage column (only one summary column now)
     percentage_col_num = len(dates) + 3
-    column_letter = chr(64 + percentage_col_num) if percentage_col_num <= 26 else f"A{chr(64 + percentage_col_num - 26)}"
+    column_letter = get_column_letter(percentage_col_num)
     ws.column_dimensions[column_letter].width = 15
     
     # Save Excel file to memory buffer
