@@ -263,8 +263,8 @@ def export_attendance_excel(class_id: str, db: Session = Depends(get_db)):
     ws = wb.active
     ws.title = f"Attendance - {class_id}"
     
-    # Set up column headers
-    headers = ['Roll No', 'Student Name'] + dates + ['Total Present', 'Total Classes', 'Percentage']
+    # Set up column headers (removed Total Present and Total Classes columns)
+    headers = ['Roll No', 'Student Name'] + dates + ['Percentage']
     
     # Define Excel styling for professional appearance
     header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
@@ -278,23 +278,16 @@ def export_attendance_excel(class_id: str, db: Session = Depends(get_db)):
     present_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")  # Light green
     absent_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")   # Light red
     
-    # Add class title row
-    ws.insert_rows(1)
-    ws.merge_cells('A1:E1')
-    title_cell = ws.cell(row=1, column=1, value=f"Attendance Report - {class_obj.subject_name} ({class_id})")
-    title_cell.font = Font(size=16, bold=True)
-    title_cell.alignment = Alignment(horizontal='center')
-    
-    # Add column headers with styling
+    # Add column headers with styling (no title row)
     for col, header in enumerate(headers, 1):
-        cell = ws.cell(row=2, column=col, value=header)
+        cell = ws.cell(row=1, column=col, value=header)
         cell.fill = header_fill
         cell.font = header_font
         cell.border = border
         cell.alignment = Alignment(horizontal='center', vertical='center')
     
-    # Add student data rows
-    row = 3
+    # Add student data rows (starting from row 2 since no title row)
+    row = 2
     for student_id in sorted(students.keys()):
         student_data = students[student_id]
         
@@ -319,13 +312,10 @@ def export_attendance_excel(class_id: str, db: Session = Depends(get_db)):
             elif status == 'A':
                 cell.fill = absent_fill
         
-        # Calculate and add summary statistics
+        # Calculate and add percentage (only percentage column now)
         percentage = (present_count / total_classes * 100) if total_classes > 0 else 0
         
-        ws.cell(row=row, column=len(dates) + 3, value=present_count).border = border
-        ws.cell(row=row, column=len(dates) + 4, value=total_classes).border = border
-        
-        percentage_cell = ws.cell(row=row, column=len(dates) + 5, value=f"{percentage:.1f}%")
+        percentage_cell = ws.cell(row=row, column=len(dates) + 3, value=f"{percentage:.1f}%")
         percentage_cell.border = border
         percentage_cell.alignment = Alignment(horizontal='center')
         
@@ -340,12 +330,10 @@ def export_attendance_excel(class_id: str, db: Session = Depends(get_db)):
         column_letter = chr(64 + col) if col <= 26 else f"A{chr(64 + col - 26)}"
         ws.column_dimensions[column_letter].width = 12
     
-    # Set width for summary columns
-    summary_start_col = len(dates) + 3
-    for i in range(3):  # Total Present, Total Classes, Percentage
-        col_num = summary_start_col + i
-        column_letter = chr(64 + col_num) if col_num <= 26 else f"A{chr(64 + col_num - 26)}"
-        ws.column_dimensions[column_letter].width = 15
+    # Set width for percentage column (only one summary column now)
+    percentage_col_num = len(dates) + 3
+    column_letter = chr(64 + percentage_col_num) if percentage_col_num <= 26 else f"A{chr(64 + percentage_col_num - 26)}"
+    ws.column_dimensions[column_letter].width = 15
     
     # Save Excel file to memory buffer
     excel_buffer = io.BytesIO()
