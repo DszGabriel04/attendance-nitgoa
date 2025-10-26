@@ -23,3 +23,7 @@ class AttendanceItem(BaseModel):
 
 class AttendanceRequest(BaseModel):
     attendees: List[AttendanceItem]
+
+class QRCheck(BaseModel):
+    device_id: str
+    session_id: str   # unique per QR session

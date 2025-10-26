@@ -12,7 +12,7 @@ from qrcode.constants import ERROR_CORRECT_M
 import base64
 import models, schemas
 from typing import List, Dict, Set
-from schemas import AttendanceRequest
+from schemas import AttendanceRequest, QRCheck
 from datetime import date
 import threading
 import time
@@ -24,6 +24,12 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.utils import get_column_letter
+
+import redis
+import os
+
+REDIS_URL = os.getenv("REDIS_URL")
+r = redis.from_url(REDIS_URL, decode_responses=True)
 
 app = FastAPI()
 
@@ -39,6 +45,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/api/test_redis")
+def test_redis():
+    r.set("test_key", "ok", ex=10)
+    return {"value": r.get("test_key")}
+
 
 def get_db():                   # Dependency to get DB session
     db = models.SessionLocal()
@@ -466,24 +478,41 @@ def validate_qr(token: str = Query(...), db: Session = Depends(get_db)):
         # Return expired token page
         return HTMLResponse(content=TOKEN_EXPIRED_HTML)
     
-    # Get class information
-    class_id = get_token_class_id(token)
-    if not class_id:
-        raise HTTPException(status_code=400, detail="Invalid token configuration")
-    
-    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
-    if not class_obj:
-        raise HTTPException(status_code=404, detail="Class not found")
-    
-    # Format the HTML template with class information
-    html_content = ATTENDANCE_FORM_HTML.format(
-        subject_name=class_obj.subject_name,
-        class_id=class_obj.id,
-        current_date=date.today().strftime('%B %d, %Y'),
-        token=token
-    )
-    
-    return HTMLResponse(content=html_content)
+    # Render a minimal HTML page with embedded JS
+    # JS sends device_id and session_id to /api/check_scan
+    html = f"""
+    <html>
+      <body>
+        <h3>Validating QR...</h3>
+        <script>
+          const session_id = "{token}";
+          // Reuse or create a unique device_id
+          const device_id = localStorage.getItem("device_id") || crypto.randomUUID();
+          localStorage.setItem("device_id", device_id);
+
+          fetch("/api/check_scan", {{
+            method: "POST",
+            headers: {{
+              "Content-Type": "application/json"
+            }},
+            body: JSON.stringify({{ device_id, session_id }})
+          }})
+          .then(res => res.json())
+          .then(data => {{
+            if (data.allowed) {{
+              window.location.href = "/qr/form?token=" + session_id;
+            }} else {{
+              document.body.innerHTML = "<h3>Already Scanned on this device!</h3>";
+            }}
+          }})
+          .catch(() => {{
+            document.body.innerHTML = "<h3>Server Error. Please try again.</h3>";
+          }});
+        </script>
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 
 # Get QR code status (number of students submitted) - optimized for bulk operations
 @app.get("/qr/status")
@@ -629,6 +658,11 @@ def cancel_qr(payload: dict = Body(...), db: Session = Depends(get_db)):
             errors.append(f"Bulk update failed: {str(e)}")
             print(f"Bulk update error: {str(e)}")
     
+    # #### Clear Redis cache for this session ####
+    keys = r.keys(f"{token}:*")
+    if keys:
+        r.delete(*keys)
+
     # Invalidate token
     invalidate_token(token)
     
@@ -639,3 +673,13 @@ def cancel_qr(payload: dict = Body(...), db: Session = Depends(get_db)):
         "submitted_students": list(submitted_students),
         "errors": errors
     }
+
+
+@app.post("/api/check_scan")
+def check_scan(data: QRCheck):
+    key = f"{data.session_id}:{data.device_id}"
+    if r.exists(key):
+        return {"allowed": False}
+    else:
+        r.set(key, "1")
+        return {"allowed": True}
