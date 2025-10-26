@@ -28,7 +28,7 @@ from openpyxl.utils import get_column_letter
 import redis
 import os
 
-REDIS_URL = os.getenv("REDIS_URL")
+REDIS_URL = os.getenv("REDIS_URL")                  #redis://red-d3tkrlqli9vc73bfkgi0:6379
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
 app = FastAPI()
