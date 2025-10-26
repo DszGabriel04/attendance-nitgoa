@@ -18,7 +18,7 @@ import threading
 import time
 from html_templates import ATTENDANCE_FORM_HTML, TOKEN_EXPIRED_HTML, ALREADY_SCANNED_HTML
 
-# Add imports for Excel functionality
+# Excel functionality
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
