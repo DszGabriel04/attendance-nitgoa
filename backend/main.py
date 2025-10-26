@@ -16,7 +16,7 @@ from schemas import AttendanceRequest, QRCheck
 from datetime import date
 import threading
 import time
-from html_templates import ATTENDANCE_FORM_HTML, TOKEN_EXPIRED_HTML
+from html_templates import ATTENDANCE_FORM_HTML, TOKEN_EXPIRED_HTML, ALREADY_SCANNED_HTML
 
 # Add imports for Excel functionality
 import pandas as pd
@@ -30,7 +30,6 @@ import os
 
 REDIS_URL = os.getenv("REDIS_URL")                  #redis://red-d3tkrlqli9vc73bfkgi0:6379
 r = redis.from_url(REDIS_URL, decode_responses=True)
-
 app = FastAPI()
 
 # Add CORS middleware
@@ -45,11 +44,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.get("/api/test_redis")
-def test_redis():
-    r.set("test_key", "ok", ex=10)
-    return {"value": r.get("test_key")}
 
 
 def get_db():                   # Dependency to get DB session
@@ -474,45 +468,27 @@ def generate_qr(
 # QR code validation page - shows form for student to enter roll number
 @app.get("/qr/validate", name="validate_qr")
 def validate_qr(token: str = Query(...), db: Session = Depends(get_db)):
-    if not is_token_active(token):
-        # Return expired token page
-        return HTMLResponse(content=TOKEN_EXPIRED_HTML)
-    
-    # Render a minimal HTML page with embedded JS
-    # JS sends device_id and session_id to /api/check_scan
-    html = f"""
-    <html>
-      <body>
-        <h3>Validating QR...</h3>
-        <script>
-          const session_id = "{token}";
-          // Reuse or create a unique device_id
-          const device_id = localStorage.getItem("device_id") || crypto.randomUUID();
-          localStorage.setItem("device_id", device_id);
+        if not is_token_active(token):
+                # Return expired token page
+                return HTMLResponse(content=TOKEN_EXPIRED_HTML)
 
-          fetch("/api/check_scan", {{
-            method: "POST",
-            headers: {{
-              "Content-Type": "application/json"
-            }},
-            body: JSON.stringify({{ device_id, session_id }})
-          }})
-          .then(res => res.json())
-          .then(data => {{
-            if (data.allowed) {{
-              window.location.href = "/qr/form?token=" + session_id;
-            }} else {{
-              document.body.innerHTML = "<h3>Already Scanned on this device!</h3>";
-            }}
-          }})
-          .catch(() => {{
-            document.body.innerHTML = "<h3>Server Error. Please try again.</h3>";
-          }});
-        </script>
-      </body>
-    </html>
-    """
-    return HTMLResponse(content=html)
+        # Render a minimal HTML page with embedded JS
+        # JS generates/reads a device_id and redirects to /qr/form with token & device_id
+        html = f"""
+        <html>
+            <body>
+                <h3>Validating QR...</h3>
+                <script>
+                    const session_id = "{token}";
+                    const device_id = localStorage.getItem("device_id") || crypto.randomUUID();
+                    localStorage.setItem("device_id", device_id);
+                    // Directly request server-rendered form; server will atomically claim the device key
+                    window.location.href = '/qr/form?token=' + session_id + '&device_id=' + device_id;
+                </script>
+            </body>
+        </html>
+        """
+        return HTMLResponse(content=html)
 
 # Get QR code status (number of students submitted) - optimized for bulk operations
 @app.get("/qr/status")
@@ -683,3 +659,38 @@ def check_scan(data: QRCheck):
     else:
         r.set(key, "1")
         return {"allowed": True}
+    
+
+
+
+@app.get("/qr/form")
+def qr_form(token: str = Query(...), device_id: str = Query(...), db: Session = Depends(get_db)):
+    # Validate token
+    if not is_token_active(token):
+        return HTMLResponse(content=TOKEN_EXPIRED_HTML)
+
+    # Compose Redis key
+    key = f"{token}:{device_id}"
+
+    # Try to set the key only if it doesn't exist. Use a TTL (e.g., 2 hours) so keys auto-expire
+    # redis-py returns True on success, None on failure when nx=True
+    if r.set(key, "1", nx=True, ex=60 * 60 * 2):  # ex = 2 hours
+        # Allowed: render attendance form server-side
+        class_id = get_token_class_id(token) or ""
+        subject_name = ""
+        if class_id:
+            class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
+            if class_obj:
+                subject_name = class_obj.subject_name
+
+        current_date = date.today().isoformat()
+        html = ATTENDANCE_FORM_HTML.format(
+            subject_name=subject_name,
+            class_id=class_id,
+            current_date=current_date,
+            token=token
+        )
+        return HTMLResponse(content=html)
+    else:
+        # Already scanned on this device
+        return HTMLResponse(content=ALREADY_SCANNED_HTML)

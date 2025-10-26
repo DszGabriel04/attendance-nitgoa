@@ -338,3 +338,27 @@ TOKEN_EXPIRED_HTML = """
 </body>
 </html>
 """
+
+
+ALREADY_SCANNED_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Already Scanned</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:#111; color:#eee; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+    .box { background:#222; padding:28px; border-radius:12px; text-align:center; max-width:420px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+    h1 { margin-bottom:8px; color:#ffb74d; }
+    p { color:#cfcfcf; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Already scanned</h1>
+    <p>This QR has already been scanned on this device. If you believe this is a mistake, ask your instructor to generate a new QR code.</p>
+  </div>
+</body>
+</html>
+"""
